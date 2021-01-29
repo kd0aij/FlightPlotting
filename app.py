@@ -11,6 +11,18 @@ from flightdata import Flight, Fields
 from components.plots import meshes, trace, tiptrace
 
 
+st.markdown(
+        f"""
+<style>
+    .reportview-container .main .block-container{{
+        max-width: 90%;
+    }}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 bin = Flight.from_csv('/home/tom/notebooks/AutoJudge/schedules/136.csv')
 
 
