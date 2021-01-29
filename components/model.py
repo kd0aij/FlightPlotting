@@ -38,10 +38,15 @@ pins=Points(vertices)
 pouts = Quaternions.from_quaternion(Quaternion.from_euler(Point(np.pi,0,-np.pi/2)), pins.count).transform_point(pins)
 pouts = Point(0.75,0,0) + pouts 
 
-def create_mesh(transform, scale=10):
+def create_mesh(transform, scale=10, name=''):
     plotpoints=transform.point(scale * pouts)
 
     x, y, z = plotpoints.data[:,:3].T
     I, J, K = faces.T
-    return go.Mesh3d(x=x,y=y,z=z,i=I,j=J,k=K,name='',showscale=False) #vertexcolor=vertices[:, 3:], #the color codes must be triplets of floats  in [0,1]!!                      
+    return go.Mesh3d(
+        x=x,y=y,z=z,i=I,j=J,k=K,
+        name=name,
+        showscale=False,
+        hoverinfo="name"
+        ) #vertexcolor=vertices[:, 3:], #the color codes must be triplets of floats  in [0,1]!!                      
 

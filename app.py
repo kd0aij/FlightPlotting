@@ -23,7 +23,8 @@ def load_data():
 flight, seq = load_data()
 
 
-npoints = st.sidebar.number_input("Number of Models", 0, 50, value=0)
+
+npoints = st.sidebar.number_input("Number of Models", 0, 50, value=20)
 scale = st.sidebar.number_input("Model Scale Factor", 1.0, 50.0, value=10.0)
 showmesh = st.sidebar.checkbox("Show Models", False)
 cgtrace = st.sidebar.checkbox("Show CG Trace", True)
@@ -43,7 +44,6 @@ def make_plot_data():
     if ttrace:
         traces += tiptrace(sec, scale * 1.85)
     return traces
-
 
 st.plotly_chart(
     go.Figure(
