@@ -23,7 +23,7 @@ st.markdown(
     )
 
 
-bin = Flight.from_csv('/home/tom/notebooks/AutoJudge/schedules/136.csv')
+bin = Flight.from_csv('P21.csv')
 
 
 @st.cache  # TODO this may not notice changes to submodules
