@@ -36,7 +36,7 @@ def meshes(npoints, scale, seq):
         ).transform,
         scale,
         "{:.1f}".format(start + (end-start) * i / npoints)
-    ) for i in range(0, npoints)]
+    ) for i in range(0, npoints+1)]
 
 
 def trace(seq):
