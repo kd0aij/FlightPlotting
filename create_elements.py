@@ -23,13 +23,13 @@ st.markdown(
     )
 
 
-initial = State.from_posattvel(
+initial = State(
             Point(30, 170, 150),
             Quaternion.from_euler(Point(0, 0, np.pi)),
-            Point(30, 0, 0)
+            Point(30, 0, 0),
+            Point(np.pi, 0, 0)
         )
 
-initial.data[State.vars.brvel] = [np.pi, 0, 0]
 
 seq = Section.from_line(initial, np.linspace(0, 1, 20))
 
