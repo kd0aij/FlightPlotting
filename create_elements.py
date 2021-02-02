@@ -23,15 +23,21 @@ st.markdown(
     )
 
 
+#initial = State(
+#            Point(30, 170, 150),
+#            Quaternion.from_euler(Point(0, 0, np.pi)),
+#            Point(30, 0, 0),
+#            Point(np.pi, 0, 0)
+#        )
+
 initial = State(
-            Point(30, 170, 150),
-            Quaternion.from_euler(Point(0, 0, np.pi)),
-            Point(30, 0, 0),
-            Point(np.pi, 0, 0)
+            Point(0, 170, 150),
+            Quaternion.from_euler(Point(np.pi, 0, np.pi)),
+            Point(10 * np.pi, 0, 0), # 620 m in 10 seconds
+            Point(0, np.pi / 5, 0) # 
         )
 
-
-seq = Section.from_line(initial, np.linspace(0, 1, 20))
+seq = Section.from_radius(initial, np.linspace(0, 10, 10))
 
 
 npoints = st.sidebar.number_input("Number of Models", 0, 50, value=20)
@@ -42,7 +48,7 @@ ttrace = st.sidebar.checkbox("Show Tip Trace", False)
 
 
 plot_range = st.slider(
-    "plot range", 0.0, 2.0, (0.0, 2.0))
+    "plot range", 0.0, 10.0, (0.0, 10.0))
 
 def make_plot_data(seq, plot_range, npoints, showmesh, cgtrace, ttrace):
     sec = seq.subset(*plot_range)
