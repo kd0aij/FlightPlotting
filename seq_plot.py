@@ -1,3 +1,4 @@
+from logging import log
 from flightdata.fields import Field
 import streamlit as st
 
@@ -9,6 +10,9 @@ from flightanalysis import Section, State, FlightLine
 from flightdata import Flight, Fields
 from components.plots import meshes, trace, tiptrace
 from geometry import Point, Quaternion
+import os
+import tkinter as tk
+import easygui
 
 
 st.markdown(
@@ -22,17 +26,26 @@ st.markdown(
         unsafe_allow_html=True,
     )
 
+logfile = 'P21.csv'
 
-bin = Flight.from_csv('P21.csv')
+if st.sidebar.button("read log csv"):
+    try:
+        newlog = easygui.fileopenbox(default="/media/tom/storage/shared/flight_logs/")
+        if os.path.splitext(newlog)[1] == '.csv':
+            logfile = newlog
+    except:
+        pass
+
+bin = Flight.from_csv(logfile)
 
 
 @st.cache  # TODO this may not notice changes to submodules
-def load_data():
+def load_data(bin):
     flight = bin.subset(101, 490)
     return flight, Section.from_flight(flight, FlightLine.from_covariance(flight))
 
 
-flight, seq = load_data()
+flight, seq = load_data(bin)
 
 
 

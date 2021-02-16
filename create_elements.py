@@ -49,15 +49,12 @@ line2 = Section.from_line(last_state, np.linspace(0, 2, 30))
 
 seq = Section.stack([line, radius, radius2, line2])
 
+
 npoints = st.sidebar.number_input("Number of Models", 0, 50, value=20)
 scale = st.sidebar.number_input("Model Scale Factor", 1.0, 50.0, value=10.0)
 showmesh = st.sidebar.checkbox("Show Models", False)
 cgtrace = st.sidebar.checkbox("Show CG Trace", True)
 ttrace = st.sidebar.checkbox("Show Tip Trace", False)
-
-ttot = float(seq.data.index[-1])
-plot_range = st.slider(
-    "plot range", 0.0, ttot, (0.0, ttot))
 
 
 def make_plot_data(seq, plot_range, npoints, showmesh, cgtrace, ttrace):
