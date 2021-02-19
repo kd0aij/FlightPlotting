@@ -1,3 +1,11 @@
+    """[summary]
+    This module generates a mesh of my plane.
+
+
+    Returns:
+        [type]: [description]
+    """
+
 import numpy as np
 import plotly.graph_objects as go
 from geometry import Transformation, Coord, Quaternion, Point, Quaternions, Points
@@ -8,6 +16,9 @@ with open('data/model.obj', encoding="utf-8") as f:
 
 
 def obj_data_to_mesh3d(odata):
+    """[summary]
+    lifted almose completely from here: https://chart-studio.plotly.com/~empet/15040/plotly-mesh3d-from-a-wavefront-obj-f/#/
+    """
     # odata is the string read from an obj file
     vertices = []
     faces = []
@@ -34,11 +45,22 @@ def obj_data_to_mesh3d(odata):
 
 vertices, faces = obj_data_to_mesh3d(obj_data)
 
+# I didnt draw the plane in the standard body axis convention so it needs to be rotated here:
 pins=Points(vertices)
 pouts = Quaternions.from_quaternion(Quaternion.from_euler(Point(np.pi,0,-np.pi/2)), pins.count).transform_point(pins)
 pouts = Point(0.75,0,0) + pouts 
 
-def create_mesh(transform, scale=10, name=''):
+def create_mesh(transform: Transformation, scale: float=10, name: str=''):
+    """Generate a Mesh3d of my plane transformed by the requested transformation.
+
+    Args:
+        transform (Transformation): [description]
+        scale (float, optional): [description]. Defaults to 10.
+        name (str, optional): [description]. Defaults to ''.
+
+    Returns:
+        [type]: [description]
+    """
     plotpoints=transform.point(scale * pouts)
 
     x, y, z = plotpoints.data[:,:3].T

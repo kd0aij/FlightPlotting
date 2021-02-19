@@ -1,5 +1,5 @@
 import plotly.graph_objects as go
-from components.model import create_mesh
+from .model import create_mesh
 from geometry import Point
 import numpy as np
 

@@ -1,0 +1,21 @@
+package:
+  name: flightplotting
+  version: "0.0.1"
+
+build:
+  number: 0
+
+source:
+  path: ./
+
+requirements:
+  build:
+    - python  {{python}}
+    - setuptools
+  host:
+    - python
+  run:
+    - python
+test:
+  imports:
+    - flightplotting
