@@ -1,21 +1,24 @@
 import plotly.graph_objects as go
-from .model import create_mesh
-from geometry import Point
+from .model import OBJ
+from geometry import Point, Coord
 import numpy as np
+from typing import List, Union
+
+def meshes(obj, npoints, seq):
+    start = seq.data.index[0]
+    end = seq.data.index[-1]
+    return [
+        obj.transform(
+            seq.get_state_from_time(
+                start + (end-start) * i / npoints
+            ).transform
+        ).create_mesh(
+            "{:.1f}".format(start + (end-start) * i / npoints)
+        ) for i in range(0, npoints+1)
+    ]
 
 
-def plot2d(datax, datay, colour='black', width=1, fig=None, name=None, text=None):
-    if not fig:
-        fig = go.Figure()
-    fig.add_trace(go.Scatter(x=datax, y=datay, name=name,
-                             text=text, line=dict(color=colour, width=width)))
-    fig.update_layout(width=800, height=500,
-                      margin=dict(l=20, r=20, t=20, b=20),)
-    fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    return fig
-
-
-def plot3d(datax, datay, dataz, colour='black', width=2, text=None):
+def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
     return go.Scatter3d(
         x=datax,
         y=datay,
@@ -27,20 +30,8 @@ def plot3d(datax, datay, dataz, colour='black', width=2, text=None):
     )
 
 
-def meshes(npoints, scale, seq):
-    start = seq.data.index[0]
-    end = seq.data.index[-1]
-    return [create_mesh(
-        seq.get_state_from_time(
-            start + (end-start) * i / npoints
-        ).transform,
-        scale,
-        "{:.1f}".format(start + (end-start) * i / npoints)
-    ) for i in range(0, npoints+1)]
-
-
 def trace(seq):
-    return plot3d(
+    return trace3d(
         *seq.pos.to_numpy().T,
         colour="black",
         text=["{:.1f}".format(val) for val in seq.data.index]
@@ -51,13 +42,31 @@ def tiptrace(seq, span):
     text = ["{:.1f}".format(val) for val in seq.data.index]
 
     def make_offset_trace(pos, colour, text):
-        return plot3d(
+        return trace3d(
             *seq.body_to_world(pos).data.T,
             colour=colour,
             text=text
         )
-    
+
     return [
         make_offset_trace(Point(0, span/2, 0), "blue", text),
         make_offset_trace(Point(0, -span/2, 0), "red", text)
     ]
+
+
+def create_3d_plot(traces):
+    return go.Figure(
+        traces,
+        layout=go.Layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            scene=dict(aspectmode='data')
+        ))
+
+def _axistrace(cid):
+    return go.trace3d(*cid.get_plot_df(20).to_numpy().T)
+
+def axestrace(cids: Union[Coord, List[Coord]]):
+    if isinstance(cids, List):
+        return [_axistrace(cid) for cid in cids]
+    elif isinstance(cids, Coord):
+        return _axistrace(cids)
