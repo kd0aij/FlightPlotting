@@ -63,7 +63,7 @@ def create_3d_plot(traces):
         ))
 
 def _axistrace(cid):
-    return go.trace3d(*cid.get_plot_df(20).to_numpy().T)
+    return trace3d(*cid.get_plot_df(20).to_numpy().T)
 
 def axestrace(cids: Union[Coord, List[Coord]]):
     if isinstance(cids, List):

@@ -39,13 +39,10 @@ class OBJ(object):
         return OBJ(Points(np.array(vertices)), np.array(faces))
 
     @staticmethod
-    def from_obj_file(filename):
-        with open(filename, encoding="utf-8") as f:
-                obj_data = f.read()
-
-        #pouts = Quaternions.from_quaternion(), pins.count).transform_point(pins)
-        #pouts = translation + pouts
-        
+    def from_obj_file(file):
+        if isinstance(file, str):
+            file = open(file, encoding="utf-8")
+        obj_data = file.read()        
         return OBJ.from_obj_data(obj_data)
 
     def transform(self, transformantion: Transformation=Transformation(Point(0.75, 0, 0), Quaternion.from_euler(Point(np.pi, 0, -np.pi/2)))):
