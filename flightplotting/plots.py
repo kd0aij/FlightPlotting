@@ -1,6 +1,6 @@
 import plotly.graph_objects as go
 from .model import OBJ
-from geometry import Point, Coord
+from geometry import Point, Coord, Points
 import numpy as np
 from typing import List, Union
 from math import cos, sin, tan, radians
@@ -36,6 +36,47 @@ def meshes(obj, npoints, seq):
         ) for i in range(0, npoints+1)
     ]
 
+# create a mesh for a "ribbon" plot
+# 3 triangles for each pair of poses: current origin to each current/next wingtip
+# and origin to next left/right wingtip
+def ribbon(scale, seq):
+    left  = Point(0, -scale, 0)
+    right = Point(0,  scale, 0)
+
+    x = []
+    y = []
+    z = []
+    faces = []
+    ctrIndex = 0
+    for i in range(seq.data.shape[0]-1):
+        # transform origin and wingtips to world frame
+        curPose = seq.get_state_from_index(i).transform
+        ctr = seq.get_state_from_index(i).pos
+        curLeft = curPose.point(left)
+        curRight = curPose.point(right)
+
+        nextPose = seq.get_state_from_index(i+1).transform
+        nextLeft = nextPose.point(left)
+        nextRight = nextPose.point(right)
+
+        # construct vertex and face lists
+        x.extend([ctr.x, curLeft.x, curRight.x, nextLeft.x, nextRight.x])
+        y.extend([ctr.y, curLeft.y, curRight.y, nextLeft.y, nextRight.y])
+        z.extend([ctr.z, curLeft.z, curRight.z, nextLeft.z, nextRight.z])
+
+        # clockwise winding direction
+        faces.append([ctrIndex, ctrIndex+1, ctrIndex+3])
+        faces.append([ctrIndex, ctrIndex+4, ctrIndex+2])
+        faces.append([ctrIndex, ctrIndex+3, ctrIndex+4])
+        ctrIndex += 5;
+
+    I, J, K = np.array(faces).T
+    return [go.Mesh3d(
+        x=x, y=y, z=z, i=I, j=J, k=K,
+        name='',
+        showscale=False,
+        hoverinfo="name"
+    )]  # vertexcolor=points[:, 3:], #the color codes must be triplets of floats  in [0,1]!!
 
 def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
     return go.Scatter3d(

@@ -45,8 +45,10 @@ class OBJ(object):
         obj_data = file.read()        
         return OBJ.from_obj_data(obj_data)
 
-    def transform(self, transformantion: Transformation=Transformation(Point(0.75, 0, 0), Quaternion.from_euler(Point(np.pi, 0, -np.pi/2)))):
-        return OBJ(transformantion.point(self.vertices), self.faces)
+    def transform(self, transformation: Transformation=
+                  Transformation(Point(0.75, 0, 0),
+                                 Quaternion.from_euler(Point(np.pi, 0, -np.pi/2)))):
+        return OBJ(transformation.point(self.vertices), self.faces)
     
     def scale(self, scale_factor):
         return OBJ(self.vertices * scale_factor, self.faces)
