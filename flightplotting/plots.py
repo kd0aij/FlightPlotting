@@ -3,6 +3,25 @@ from .model import OBJ
 from geometry import Point, Coord
 import numpy as np
 from typing import List, Union
+from math import cos, sin, tan, radians
+
+
+xlim=170*tan(radians(60))
+ylim=170
+
+
+def boxtrace():
+    return [go.Mesh3d(
+        #  0  1     2     3      4    5      6
+        x=[0, xlim, 0,    -xlim, xlim, 0,   -xlim], 
+        y=[0, ylim, ylim,  ylim, ylim, ylim, ylim], 
+        z=[0, 0,    0,     0,    xlim, xlim, xlim], 
+        i=[0, 0, 0, 0, 0], 
+        j=[1, 2, 1, 3, 4], 
+        k=[2, 3, 4, 6, 6],
+        opacity=0.4
+    )]
+
 
 def meshes(obj, npoints, seq):
     start = seq.data.index[0]
