@@ -9,7 +9,7 @@ Created on Sun Apr  4 16:16:44 2021
 from flightanalysis import Section, FlightLine
 from flightdata import Flight
 import numpy as np
-from flightplotting.plots import tiptrace, meshes, ribbon, create_3d_plot
+from flightplotting.plots import tiptrace, meshes, ribbon, boxtrace, boxfrustum, create_3d_plot
 from flightplotting.model import OBJ
 from geometry import Transformation, Point, Quaternion, Points
 
@@ -29,7 +29,16 @@ start = 268
 end = 303
 subSec = sec.subset(start, end)
 
-fig = create_3d_plot(tiptrace(subSec, 10*1.85) + ribbon(9, subSec) + meshes(obj.scale(10), 10, subSec))
+span = 1.85
+scale = 5
+dt = end - start
+# draw models 1 second apart
+numModels = int(dt)
+
+fig = create_3d_plot(tiptrace(subSec, scale * span) +
+                     ribbon(scale * span * .9, subSec) +
+                     meshes(obj.scale(scale), numModels, subSec) +
+                     boxfrustum())
 
 # save interactive figure
 fname = "%s_%s-%s.html" % (binfile, start, end)

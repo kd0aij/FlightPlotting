@@ -6,22 +6,59 @@ from typing import List, Union
 from math import cos, sin, tan, radians
 
 
-xlim=170*tan(radians(60))
-ylim=170
+# distance from pilot box to runway centerline
+# note that origin is on runway centerline
+pbox = 15
+# max distance from pilot box to aerobatic box
+depth = 175
+xlim = depth * tan(radians(60))
+ylim = depth - pbox
+zmin = 20
 
-
+# maneuvering box: 60 degrees horizontal and vertical from pilot box
 def boxtrace():
     return [go.Mesh3d(
-        #  0  1     2     3      4    5      6
-        x=[0, xlim, 0,    -xlim, xlim, 0,   -xlim], 
-        y=[0, ylim, ylim,  ylim, ylim, ylim, ylim], 
-        z=[0, 0,    0,     0,    xlim, xlim, xlim], 
-        i=[0, 0, 0, 0, 0], 
-        j=[1, 2, 1, 3, 4], 
+        #      0     1     2      3     4     5      6
+        x=[    0, xlim,    0, -xlim, xlim,    0, -xlim],
+        y=[-pbox, ylim, ylim,  ylim, ylim, ylim,  ylim],
+        z=[    0,    0,    0,     0, xlim, xlim,  xlim],
+        i=[0, 0, 0, 0, 0],
+        j=[1, 2, 1, 3, 4],
         k=[2, 3, 4, 6, 6],
         opacity=0.4
     )]
 
+# centerline of maneuvering box at depth
+def boxplane():
+    return [go.Mesh3d(
+        #     0      1      2     3
+        x=[xlim, -xlim, -xlim, xlim],
+        y=[ylim,  ylim,  ylim, ylim],
+        z=[zmin,  zmin,  xlim, xlim],
+        i=[0, 0],
+        j=[1, 2],
+        k=[2, 3],
+        opacity=0.4
+    )]
+
+# maneuvering box over depth range
+mindepth = 125
+xlim2 = mindepth * tan(radians(60))
+ylim2 = mindepth - pbox
+def boxfrustum():
+    return [go.Mesh3d(
+        #     0      1      2     3      4       5       6      7
+        x=[xlim, -xlim, -xlim, xlim, xlim2, -xlim2, -xlim2, xlim2],
+        y=[ylim,  ylim,  ylim, ylim, ylim2,  ylim2,  ylim2, ylim2],
+        z=[zmin,  zmin,  xlim, xlim,  zmin,   zmin,  xlim2, xlim2],
+        # i=[0, 0, 4, 4, 2, 7, 1, 6, 7, 0],
+        # j=[1, 2, 5, 6, 3, 6, 2, 5, 3, 4],
+        # k=[2, 3, 6, 7, 7, 2, 6, 1, 0, 7],
+        i=[2, 7, 1, 6, 7, 0],
+        j=[3, 6, 2, 5, 3, 4],
+        k=[7, 2, 6, 1, 0, 7],
+        opacity=0.4
+    )]
 
 def meshes(obj, npoints, seq):
     start = seq.data.index[0]
@@ -39,36 +76,41 @@ def meshes(obj, npoints, seq):
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
 # and origin to next left/right wingtip
+# TODO: add colors indicating roll angle ranges
 def ribbon(scale, seq):
-    left  = Point(0, -scale, 0)
-    right = Point(0,  scale, 0)
+    left  = Point(0, -scale/2, 0)
+    right = Point(0,  scale/2, 0)
 
-    x = []
-    y = []
-    z = []
+    # transform origin and wingtips to world frame
+    curPose = seq.get_state_from_index(0).transform
+    ctr = seq.get_state_from_index(0).pos
+    curLeft = curPose.point(left)
+    curRight = curPose.point(right)
+
+    # init vertex and face lists
+    x = [ctr.x, curLeft.x, curRight.x]
+    y = [ctr.y, curLeft.y, curRight.y]
+    z = [ctr.z, curLeft.z, curRight.z]
     faces = []
-    ctrIndex = 0
-    for i in range(seq.data.shape[0]-1):
-        # transform origin and wingtips to world frame
-        curPose = seq.get_state_from_index(i).transform
-        ctr = seq.get_state_from_index(i).pos
-        curLeft = curPose.point(left)
-        curRight = curPose.point(right)
 
-        nextPose = seq.get_state_from_index(i+1).transform
+    ctrIndex = 0
+    for i in range(1, seq.data.shape[0]):
+        # transform origin and wingtips to world frame
+        nextPose = seq.get_state_from_index(i).transform
+        nextctr = seq.get_state_from_index(i).pos
         nextLeft = nextPose.point(left)
         nextRight = nextPose.point(right)
 
-        # construct vertex and face lists
-        x.extend([ctr.x, curLeft.x, curRight.x, nextLeft.x, nextRight.x])
-        y.extend([ctr.y, curLeft.y, curRight.y, nextLeft.y, nextRight.y])
-        z.extend([ctr.z, curLeft.z, curRight.z, nextLeft.z, nextRight.z])
+        # update vertex and face lists
+        x.extend([nextctr.x, nextLeft.x, nextRight.x])
+        y.extend([nextctr.y, nextLeft.y, nextRight.y])
+        z.extend([nextctr.z, nextLeft.z, nextRight.z])
 
         # clockwise winding direction
-        faces.append([ctrIndex, ctrIndex+1, ctrIndex+3])
-        faces.append([ctrIndex, ctrIndex+4, ctrIndex+2])
-        faces.append([ctrIndex, ctrIndex+3, ctrIndex+4])
-        ctrIndex += 5;
+        faces.append([ctrIndex, ctrIndex+1, ctrIndex+4])
+        faces.append([ctrIndex, ctrIndex+5, ctrIndex+2])
+        faces.append([ctrIndex, ctrIndex+4, ctrIndex+5])
+        ctrIndex += 3;
 
     I, J, K = np.array(faces).T
     return [go.Mesh3d(
