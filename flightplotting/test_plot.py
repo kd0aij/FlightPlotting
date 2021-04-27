@@ -41,8 +41,10 @@ fig = create_3d_plot(tiptrace(subSec, scale * span) +
                      boxfrustum())
 
 # save interactive figure
+from pathlib import Path
+basepath = str(Path.home()) + "/temp/"
 fname = "%s_%s-%s.html" % (binfile, start, end)
-fig.write_html(fname)
+fig.write_html(basepath + fname)
 
 # create and save 3-views
 import plotly.io as pio
@@ -53,7 +55,7 @@ camera = dict(
     eye=dict(x=2.5, y=0, z=0)
 )
 fig.update_layout(scene_camera=camera, title=name)
-fig.write_image("images/Xview.svg")
+fig.write_image(basepath + "Xview.svg")
 fig.show()
 
 fig.update_layout(scene_camera=camera, title=name)
@@ -62,7 +64,7 @@ camera = dict(
     eye=dict(x=0., y=2.5, z=0.)
 )
 fig.update_layout(scene_camera=camera, title=name)
-fig.write_image("images/Yview.svg")
+fig.write_image(basepath + "Yview.svg")
 fig.show()
 
 fig.update_layout(scene_camera=camera, title=name)
@@ -71,5 +73,5 @@ camera = dict(
     eye=dict(x=0., y=0, z=2.5)
 )
 fig.update_layout(scene_camera=camera, title=name)
-fig.write_image("images/Zview.svg")
+fig.write_image(basepath + "Zview.svg")
 fig.show()
