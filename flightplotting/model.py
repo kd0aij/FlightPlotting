@@ -51,7 +51,7 @@ class OBJ(object):
     def scale(self, scale_factor):
         return OBJ(self.vertices * scale_factor, self.faces)
 
-    def create_mesh(self, name: str = ''):
+    def create_mesh(self, colour='orange', name: str = ''):
         """Generate a Mesh3d of my plane transformed by the requested transformation.
 
         Args:
@@ -67,5 +67,6 @@ class OBJ(object):
             x=x, y=y, z=z, i=I, j=J, k=K,
             name=name,
             showscale=False,
-            hoverinfo="name"
+            hoverinfo="name",
+            color=colour
         )  # vertexcolor=vertices[:, 3:], #the color codes must be triplets of floats  in [0,1]!!

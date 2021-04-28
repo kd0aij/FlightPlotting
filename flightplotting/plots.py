@@ -23,7 +23,7 @@ def boxtrace():
     )]
 
 
-def meshes(obj, npoints, seq):
+def meshes(obj, npoints, seq, colour):
     start = seq.data.index[0]
     end = seq.data.index[-1]
     return [
@@ -32,6 +32,7 @@ def meshes(obj, npoints, seq):
                 start + (end-start) * i / npoints
             ).transform
         ).create_mesh(
+            colour,
             "{:.1f}".format(start + (end-start) * i / npoints)
         ) for i in range(0, npoints+1)
     ]
@@ -42,7 +43,7 @@ def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
         x=datax,
         y=datay,
         z=dataz,
-        line=dict(color=colour, width=width, showscale=True),
+        line=dict(color=colour, width=width),
         mode='lines',
         text=text,
         hoverinfo="text"
