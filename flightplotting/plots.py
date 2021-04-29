@@ -51,13 +51,35 @@ def boxfrustum():
         x=[xlim, -xlim, -xlim, xlim, xlim2, -xlim2, -xlim2, xlim2],
         y=[ylim,  ylim,  ylim, ylim, ylim2,  ylim2,  ylim2, ylim2],
         z=[zmin,  zmin,  xlim, xlim,  zmin,   zmin,  xlim2, xlim2],
+        # all 5 faces (excluding bottom)
         # i=[0, 0, 4, 4, 2, 7, 1, 6, 7, 0],
         # j=[1, 2, 5, 6, 3, 6, 2, 5, 3, 4],
         # k=[2, 3, 6, 7, 7, 2, 6, 1, 0, 7],
+        # left, right and top faces
         i=[2, 7, 1, 6, 7, 0],
         j=[3, 6, 2, 5, 3, 4],
         k=[7, 2, 6, 1, 0, 7],
         opacity=0.4
+    )]
+
+def boxfrustumEdges():
+    zmin = 0
+    #     0      1      2     3      4       5       6      7
+    x=[xlim, -xlim, -xlim, xlim, xlim2, -xlim2, -xlim2, xlim2]
+    y=[ylim,  ylim,  ylim, ylim, ylim2,  ylim2,  ylim2, ylim2]
+    z=[zmin,  zmin,  xlim, xlim,  zmin,   zmin,  xlim2, xlim2]
+    i=[1,2,3,0,3,7,4,7,6,2,6,5]
+
+    datax = [x[n] for n in i]
+    datay = [y[n] for n in i]
+    dataz = [z[n] for n in i]
+
+    return [go.Scatter3d(
+        x=datax,
+        y=datay,
+        z=dataz,
+        line=dict(color='black', width=2, showscale=False),
+        mode='lines',
     )]
 
 def meshes(obj, npoints, seq):
@@ -72,6 +94,28 @@ def meshes(obj, npoints, seq):
             "{:.1f}".format(start + (end-start) * i / npoints)
         ) for i in range(0, npoints+1)
     ]
+
+green = [0., 1., 0.]
+blue = [0., 0., 1.]
+yellow = [.8, .8, 0.]
+red = [1., 0., 0.]
+levelThresh = radians(10)
+
+def rollColor(roll):
+    if abs(roll) < levelThresh:
+        # level
+        return green
+    elif abs(roll-radians(180)) < levelThresh:
+        # inverted
+        return blue
+    elif abs(roll-radians(90)) < levelThresh:
+        # right knife edge
+        return yellow
+    elif abs(roll+radians(90)) < levelThresh:
+        # left knife edge
+        return yellow
+    else:
+        return red
 
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
@@ -92,6 +136,8 @@ def ribbon(scale, seq):
     y = [ctr.y, curLeft.y, curRight.y]
     z = [ctr.z, curLeft.z, curRight.z]
     faces = []
+    facecolor = rollColor(seq.get_state_from_index(0).att.to_euler().x)
+    facecolors = [facecolor, facecolor, facecolor]
 
     ctrIndex = 0
     for i in range(1, seq.data.shape[0]):
@@ -106,18 +152,26 @@ def ribbon(scale, seq):
         y.extend([nextctr.y, nextLeft.y, nextRight.y])
         z.extend([nextctr.z, nextLeft.z, nextRight.z])
 
+        facecolor = rollColor(seq.get_state_from_index(i).att.to_euler().x)
+
         # clockwise winding direction
         faces.append([ctrIndex, ctrIndex+1, ctrIndex+4])
+        facecolors.append(facecolor)
         faces.append([ctrIndex, ctrIndex+5, ctrIndex+2])
+        facecolors.append(facecolor)
         faces.append([ctrIndex, ctrIndex+4, ctrIndex+5])
+        facecolors.append(facecolor)
+
         ctrIndex += 3;
 
     I, J, K = np.array(faces).T
+    text=["{:.1f}".format(val) for val in seq.data.index]
     return [go.Mesh3d(
         x=x, y=y, z=z, i=I, j=J, k=K,
-        name='',
-        showscale=False,
-        hoverinfo="name"
+        intensitymode="cell",
+        facecolor=facecolors,
+        showscale=True,
+        hoverinfo="text"
     )]  # vertexcolor=points[:, 3:], #the color codes must be triplets of floats  in [0,1]!!
 
 def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
@@ -125,7 +179,7 @@ def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
         x=datax,
         y=datay,
         z=dataz,
-        line=dict(color=colour, width=width, showscale=True),
+        line=dict(color=colour, width=width, showscale=False),
         mode='lines',
         text=text,
         hoverinfo="text"
