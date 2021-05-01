@@ -36,8 +36,8 @@ sec = Section.from_flight(bin, FlightLine.from_heading(bin, heading))
 # bin = Flight.from_log('../../data/logs/' + binfile + ".BIN")
 # sec = Section.from_flight(bin, FlightLine.from_covariance(bin))
 
-start = 268
-end = 330
+start = 173
+end = 182
 subSec = sec.subset(start, end)
 
 span = 1.85
@@ -50,7 +50,7 @@ numModels = int(dt)
 fig = go.Figure(
         tiptrace(subSec, scale * span) +
         ribbon(scale * span * .9, subSec) +
-        #meshes(obj.scale(scale), numModels, subSec) +
+        meshes(obj.scale(scale), numModels, subSec) +
         #boxfrustum(),
         boxfrustumEdges(),
         layout=go.Layout(
@@ -80,7 +80,7 @@ camera = dict(
 )
 fig.update_layout(scene_camera=camera, title_text=name)
 fig.write_image(basepath + "Xview.svg")
-fig.show()
+#fig.show()
 
 name = 'Y view'
 camera = dict(
@@ -88,7 +88,7 @@ camera = dict(
 )
 fig.update_layout(scene_camera=camera, title=name)
 fig.write_image(basepath + "Yview.svg")
-fig.show()
+#fig.show()
 
 name = 'Z View'
 camera = dict(
@@ -96,4 +96,4 @@ camera = dict(
 )
 fig.update_layout(scene_camera=camera, title=name)
 fig.write_image(basepath + "Zview.svg")
-fig.show()
+#fig.show()

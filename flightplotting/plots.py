@@ -80,6 +80,7 @@ def boxfrustumEdges():
         z=dataz,
         line=dict(color='black', width=2, showscale=False),
         mode='lines',
+        name='box edges'
     )]
 
 def meshes(obj, npoints, seq):
@@ -120,7 +121,6 @@ def rollColor(roll):
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
 # and origin to next left/right wingtip
-# TODO: add colors indicating roll angle ranges
 def ribbon(scale, seq):
     left  = Point(0, -scale/2, 0)
     right = Point(0,  scale/2, 0)
@@ -165,16 +165,16 @@ def ribbon(scale, seq):
         ctrIndex += 3;
 
     I, J, K = np.array(faces).T
-    text=["{:.1f}".format(val) for val in seq.data.index]
     return [go.Mesh3d(
+        name='ribbon',
         x=x, y=y, z=z, i=I, j=J, k=K,
         intensitymode="cell",
         facecolor=facecolors,
-        showscale=True,
-        hoverinfo="text"
-    )]  # vertexcolor=points[:, 3:], #the color codes must be triplets of floats  in [0,1]!!
+        showlegend=True,
+        hoverinfo="none"
+    )]
 
-def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
+def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None):
     return go.Scatter3d(
         x=datax,
         y=datay,
@@ -182,7 +182,8 @@ def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
         line=dict(color=colour, width=width, showscale=False),
         mode='lines',
         text=text,
-        hoverinfo="text"
+        hoverinfo="text",
+        name=name
     )
 
 
@@ -195,18 +196,21 @@ def trace(seq):
 
 
 def tiptrace(seq, span):
-    text = ["{:.1f}".format(val) for val in seq.data.index]
+    text = ["{:.1f}, roll: {:.1f}".format(seq.data.index[i],
+                                          seq.get_state_from_index(i).att.to_euler().x * 180/np.pi)
+            for i in range(seq.data.shape[0])]
 
-    def make_offset_trace(pos, colour, text):
+    def make_offset_trace(pos, name, colour, text):
         return trace3d(
             *seq.body_to_world(pos).data.T,
+            name=name,
             colour=colour,
             text=text
         )
 
     return [
-        make_offset_trace(Point(0, span/2, 0), "blue", text),
-        make_offset_trace(Point(0, -span/2, 0), "red", text)
+        make_offset_trace(Point(0, span/2, 0), "starboard", "green", text),
+        make_offset_trace(Point(0, -span/2, 0), "port", "red", text)
     ]
 
 
