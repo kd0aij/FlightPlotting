@@ -7,13 +7,21 @@ from typing import List, Union
 from math import cos, sin, tan, radians
 
 
+# distance from pilot box to runway centerline
+# note that origin is on runway centerline
+pbox = 15
+# max distance from pilot box to aerobatic box
+depth = 175
+xlim = depth * tan(radians(60))
+ylim = depth - pbox
+zmin = 20
+
+# maneuvering box: 60 degrees horizontal and vertical from pilot box
 def boxtrace():
-    xlim=170*tan(radians(60))
-    ylim=170
     return [go.Mesh3d(
         #  0  1     2     3      4    5      6
         x=[0, xlim, 0,    -xlim, xlim, 0,   -xlim], 
-        y=[0, ylim, ylim,  ylim, ylim, ylim, ylim], 
+        y=[-pbox, ylim, ylim,  ylim, ylim, ylim,  ylim],
         z=[0, 0,    0,     0,    xlim, xlim, xlim], 
         i=[0, 0, 0, 0, 0], 
         j=[1, 2, 1, 3, 4], 
@@ -21,23 +29,184 @@ def boxtrace():
         opacity=0.4
     )]
 
+# centerline of maneuvering box at depth
+def boxplane():
+    return [go.Mesh3d(
+        #     0      1      2     3
+        x=[xlim, -xlim, -xlim, xlim],
+        y=[ylim,  ylim,  ylim, ylim],
+        z=[zmin,  zmin,  xlim, xlim],
+        i=[0, 0],
+        j=[1, 2],
+        k=[2, 3],
+        opacity=0.4
+    )]
+
+# maneuvering box over depth range
+mindepth = 125
+xlim2 = mindepth * tan(radians(60))
+ylim2 = mindepth - pbox
+def boxfrustum():
+    return [go.Mesh3d(
+        #     0      1      2     3      4       5       6      7
+        x=[xlim, -xlim, -xlim, xlim, xlim2, -xlim2, -xlim2, xlim2],
+        y=[ylim,  ylim,  ylim, ylim, ylim2,  ylim2,  ylim2, ylim2],
+        z=[zmin,  zmin,  xlim, xlim,  zmin,   zmin,  xlim2, xlim2],
+        # all 5 faces (excluding bottom)
+        # i=[0, 0, 4, 4, 2, 7, 1, 6, 7, 0],
+        # j=[1, 2, 5, 6, 3, 6, 2, 5, 3, 4],
+        # k=[2, 3, 6, 7, 7, 2, 6, 1, 0, 7],
+        # left, right and top faces
+        i=[2, 7, 1, 6, 7, 0],
+        j=[3, 6, 2, 5, 3, 4],
+        k=[7, 2, 6, 1, 0, 7],
+        opacity=0.4
+    )]
+
+def boxfrustumEdges():
+    zmin = 0
+    #     0      1      2     3      4       5       6      7
+    x=[xlim, -xlim, -xlim, xlim, xlim2, -xlim2, -xlim2, xlim2]
+    y=[ylim,  ylim,  ylim, ylim, ylim2,  ylim2,  ylim2, ylim2]
+    z=[zmin,  zmin,  xlim, xlim,  zmin,   zmin,  xlim2, xlim2]
+    i=[1,2,3,0,3,7,4,7,6,2,6,5]
+
+    datax = [x[n] for n in i]
+    datay = [y[n] for n in i]
+    dataz = [z[n] for n in i]
+
+    return [go.Scatter3d(
+        x=datax,
+        y=datay,
+        z=dataz,
+        line=dict(color='black', width=2, showscale=False),
+        mode='lines',
+        name='box edges'
+    )]
+
+def rollColorName(roll):
+    if abs(roll) < levelThresh:
+        # level
+        return 'green'
+    elif abs(roll-radians(180)) < levelThresh:
+        # inverted
+        return 'blue'
+    elif abs(roll-radians(90)) < levelThresh:
+        # right knife edge
+        return 'yellow'
+    elif abs(roll+radians(90)) < levelThresh:
+        # left knife edge
+        return 'yellow'
+    else:
+        return 'red'
 
 def meshes(obj, npoints, seq, colour):
     start = seq.data.index[0]
     end = seq.data.index[-1]
+    state = [ seq.get_state_from_time(start + (end-start) * i / npoints)
+            for i in range(0, npoints+1) ]
     return [
-        obj.transform(
-            seq.get_state_from_time(
-                start + (end-start) * i / npoints
-            ).transform
-        ).create_mesh(
-            colour,
-            "{:.1f}".format(start + (end-start) * i / npoints)
-        ) for i in range(0, npoints+1)
+        obj.transform(state[i].transform).create_mesh(
+            rollColorName(state[i].att.to_euler().x),
+            "{:.1f}".format(start + (end-start) * i / npoints))
+        for i in range(0, npoints+1)
     ]
 
+green = [0., 1., 0.]
+blue = [0., 0., 1.]
+yellow = [.8, .8, 0.]
+red = [1., 0., 0.]
+levelThresh = radians(10)
 
-def trace3d(datax, datay, dataz, colour='black', width=2, text=None, name="trace3d"):
+def rollColor(roll):
+    if abs(roll) < levelThresh:
+        # level
+        return green
+    elif abs(roll-radians(180)) < levelThresh:
+        # inverted
+        return blue
+    elif abs(roll-radians(90)) < levelThresh:
+        # right knife edge
+        return yellow
+    elif abs(roll+radians(90)) < levelThresh:
+        # left knife edge
+        return yellow
+    else:
+        return red
+
+def rollColor(roll):
+    if abs(roll) < levelThresh:
+        # level
+        return green
+    elif abs(roll-radians(180)) < levelThresh:
+        # inverted
+        return blue
+    elif abs(roll-radians(90)) < levelThresh:
+        # right knife edge
+        return yellow
+    elif abs(roll+radians(90)) < levelThresh:
+        # left knife edge
+        return yellow
+    else:
+        return red
+
+# create a mesh for a "ribbon" plot
+# 3 triangles for each pair of poses: current origin to each current/next wingtip
+# and origin to next left/right wingtip
+def ribbon(scale, seq):
+    left  = Point(0, -scale/2, 0)
+    right = Point(0,  scale/2, 0)
+
+    # transform origin and wingtips to world frame
+    curPose = seq.get_state_from_index(0).transform
+    ctr = seq.get_state_from_index(0).pos
+    curLeft = curPose.point(left)
+    curRight = curPose.point(right)
+
+    # init vertex and face lists
+    x = [ctr.x, curLeft.x, curRight.x]
+    y = [ctr.y, curLeft.y, curRight.y]
+    z = [ctr.z, curLeft.z, curRight.z]
+    faces = []
+    facecolor = rollColor(seq.get_state_from_index(0).att.to_euler().x)
+    facecolors = [facecolor, facecolor, facecolor]
+
+    ctrIndex = 0
+    for i in range(1, seq.data.shape[0]):
+        # transform origin and wingtips to world frame
+        nextPose = seq.get_state_from_index(i).transform
+        nextctr = seq.get_state_from_index(i).pos
+        nextLeft = nextPose.point(left)
+        nextRight = nextPose.point(right)
+
+        # update vertex and face lists
+        x.extend([nextctr.x, nextLeft.x, nextRight.x])
+        y.extend([nextctr.y, nextLeft.y, nextRight.y])
+        z.extend([nextctr.z, nextLeft.z, nextRight.z])
+
+        facecolor = rollColor(seq.get_state_from_index(i).att.to_euler().x)
+
+        # clockwise winding direction
+        faces.append([ctrIndex, ctrIndex+1, ctrIndex+4])
+        facecolors.append(facecolor)
+        faces.append([ctrIndex, ctrIndex+5, ctrIndex+2])
+        facecolors.append(facecolor)
+        faces.append([ctrIndex, ctrIndex+4, ctrIndex+5])
+        facecolors.append(facecolor)
+
+        ctrIndex += 3;
+
+    I, J, K = np.array(faces).T
+    return [go.Mesh3d(
+        name='ribbon',
+        x=x, y=y, z=z, i=I, j=J, k=K,
+        intensitymode="cell",
+        facecolor=facecolors,
+        showlegend=True,
+        hoverinfo="none"
+    )]
+
+def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None):
     return go.Scatter3d(
         x=datax,
         y=datay,
@@ -58,45 +227,16 @@ def cgtrace(seq, name="cgtrace"):
         name=name
     )
 
-def manoeuvretraces(seq):
-    traces = []
-    for name, manoeuvre in seq.split_manoeuvres().items():
-        traces.append(go.Scatter3d(
-            x=manoeuvre.x,
-            y=manoeuvre.y,
-            z=manoeuvre.z,
-            mode='lines',
-            text=manoeuvre.element,
-            hoverinfo="text",
-            name=name
-        ))
-
-    return traces
-
-
-def elementtraces(seq):
-    traces = []
-    for name, element in seq.split_elements().items():
-        traces.append(go.Scatter3d(
-            x=element.x,
-            y=element.y,
-            z=element.z,
-            mode='lines',
-            text=element.manoeuvre,
-            hoverinfo="text",
-            name=name
-        ))
-
-    return traces
-
-
 
 def tiptrace(seq, span):
-    text = ["{:.1f}".format(val) for val in seq.data.index]
+    text = ["{:.1f}, roll: {:.1f}".format(seq.data.index[i],
+                                          seq.get_state_from_index(i).att.to_euler().x * 180/np.pi)
+            for i in range(seq.data.shape[0])]
 
-    def make_offset_trace(pos, colour, text):
-        tr =  trace3d(
+    def make_offset_trace(pos, name, colour, text):
+        return trace3d(
             *seq.body_to_world(pos).data.T,
+            name=name,
             colour=colour,
             text=text,
             width=1
@@ -105,23 +245,15 @@ def tiptrace(seq, span):
         return tr
 
     return [
-        make_offset_trace(Point(0, span/2, 0), "blue", text),
-        make_offset_trace(Point(0, -span/2, 0), "red", text)
+        make_offset_trace(Point(0, span/2, 0), "starboard", "green", text),
+        make_offset_trace(Point(0, -span/2, 0), "port", "red", text)
     ]
 
 
-def axis_rate_trace(sec, ab = False):
-    if ab:
-        return [
-            go.Scatter(x=sec.data.index, y=abs(sec.brvr), name="r"),
-            go.Scatter(x=sec.data.index, y=sec.brvp, name="p"),
-            go.Scatter(x=sec.data.index, y=abs(sec.brvy), name="y")]
-    else:
-        return [
-            go.Scatter(x=sec.data.index, y=sec.brvr, name="r"),
-            go.Scatter(x=sec.data.index, y=sec.brvp, name="p"),
-            go.Scatter(x=sec.data.index, y=sec.brvy, name="y")]
-
+def create_3d_plot(traces):
+    return go.Figure(
+        traces,
+        layout=go.Layout(template="flight3d+judge_view"))
 
 def _axistrace(cid):
     return trace3d(*cid.get_plot_df(20).to_numpy().T)
