@@ -84,76 +84,57 @@ def boxfrustumEdges():
         name='box edges'
     )]
 
+levelThresh = radians(10)
 def rollColorName(roll):
-    if abs(roll) < levelThresh:
+    absroll = abs(roll)
+    if absroll < levelThresh:
         # level
         return 'green'
-    elif abs(roll-radians(180)) < levelThresh:
+    elif abs(absroll-radians(180)) < levelThresh:
         # inverted
         return 'blue'
-    elif abs(roll-radians(90)) < levelThresh:
-        # right knife edge
-        return 'yellow'
-    elif abs(roll+radians(90)) < levelThresh:
-        # left knife edge
+    elif abs(absroll-radians(90)) < levelThresh:
+        # knife edge
         return 'yellow'
     else:
         return 'red'
-
-def meshes(obj, npoints, seq, colour):
-    start = seq.data.index[0]
-    end = seq.data.index[-1]
-    state = [ seq.get_state_from_time(start + (end-start) * i / npoints)
-            for i in range(0, npoints+1) ]
-    return [
-        obj.transform(state[i].transform).create_mesh(
-            rollColorName(state[i].att.to_euler().x),
-            "{:.1f}".format(start + (end-start) * i / npoints))
-        for i in range(0, npoints+1)
-    ]
 
 green = [0., 1., 0.]
 blue = [0., 0., 1.]
 yellow = [.8, .8, 0.]
 red = [1., 0., 0.]
-levelThresh = radians(10)
 
 def rollColor(roll):
-    if abs(roll) < levelThresh:
+    absroll = abs(roll)
+    if absroll < levelThresh:
         # level
         return green
-    elif abs(roll-radians(180)) < levelThresh:
+    elif abs(absroll-radians(180)) < levelThresh:
         # inverted
         return blue
-    elif abs(roll-radians(90)) < levelThresh:
-        # right knife edge
-        return yellow
-    elif abs(roll+radians(90)) < levelThresh:
-        # left knife edge
+    elif abs(absroll-radians(90)) < levelThresh:
+        # knife edge
         return yellow
     else:
         return red
 
-def rollColor(roll):
-    if abs(roll) < levelThresh:
-        # level
-        return green
-    elif abs(roll-radians(180)) < levelThresh:
-        # inverted
-        return blue
-    elif abs(roll-radians(90)) < levelThresh:
-        # right knife edge
-        return yellow
-    elif abs(roll+radians(90)) < levelThresh:
-        # left knife edge
-        return yellow
-    else:
-        return red
+
+def meshes(obj, npoints, seq, colour, enu2ned):
+    start = seq.data.index[0]
+    end = seq.data.index[-1]
+    state = [ seq.get_state_from_time(start + (end-start) * i / npoints)
+             for i in range(0, npoints+1) ]
+    return [
+        obj.transform(state[i].transform).create_mesh(
+            rollColorName(enu2ned.quat(state[i].att).to_euler().x),
+            "{:.1f}".format(start + (end-start) * i / npoints))
+        for i in range(0, npoints+1)
+    ]
 
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
 # and origin to next left/right wingtip
-def ribbon(scale, seq):
+def ribbon(scale, seq, enu2ned):
     left  = Point(0, -scale/2, 0)
     right = Point(0,  scale/2, 0)
 
@@ -168,7 +149,7 @@ def ribbon(scale, seq):
     y = [ctr.y, curLeft.y, curRight.y]
     z = [ctr.z, curLeft.z, curRight.z]
     faces = []
-    facecolor = rollColor(seq.get_state_from_index(0).att.to_euler().x)
+    facecolor = rollColor(enu2ned.quat(seq.get_state_from_index(0).att).to_euler().x)
     facecolors = [facecolor, facecolor, facecolor]
 
     ctrIndex = 0
@@ -184,7 +165,7 @@ def ribbon(scale, seq):
         y.extend([nextctr.y, nextLeft.y, nextRight.y])
         z.extend([nextctr.z, nextLeft.z, nextRight.z])
 
-        facecolor = rollColor(seq.get_state_from_index(i).att.to_euler().x)
+        facecolor = rollColor(enu2ned.quat(seq.get_state_from_index(i).att).to_euler().x)
 
         # clockwise winding direction
         faces.append([ctrIndex, ctrIndex+1, ctrIndex+4])
@@ -228,9 +209,11 @@ def cgtrace(seq, name="cgtrace"):
     )
 
 
-def tiptrace(seq, span):
-    text = ["{:.1f}, roll: {:.1f}".format(seq.data.index[i],
-                                          seq.get_state_from_index(i).att.to_euler().x * 180/np.pi)
+def tiptrace(seq, span, enu2ned):
+    def rpyd(i):
+        return enu2ned.quat(seq.get_state_from_index(i).att).to_euler() * 180/np.pi
+    text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, yaw: {:.1f}".format(
+        seq.data.index[i], rpyd(i).x, rpyd(i).y, rpyd(i).z)
             for i in range(seq.data.shape[0])]
 
     def make_offset_trace(pos, name, colour, text):
@@ -241,8 +224,6 @@ def tiptrace(seq, span):
             text=text,
             width=1
         )
-        tr['showlegend'] = False
-        return tr
 
     return [
         make_offset_trace(Point(0, span/2, 0), "starboard", "green", text),
