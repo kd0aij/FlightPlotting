@@ -1,7 +1,9 @@
 import plotly.graph_objects as go
 import flightplotting.templates
+from flightanalysis import State
+
 from .model import OBJ
-from geometry import Point, Coord, Quaternion
+from geometry import Point, Coord, Quaternion, Transformation
 from geometry.point import vector_norm, normalize_vector, dot_product, cross_product
 import numpy as np
 from typing import List, Union
@@ -126,25 +128,29 @@ def wrapPi(r, hyst=0):
         r += 2*np.pi
     return r
 
-# calculate maneuver plane
-def mPlane(chdg, vel3d:Point, xyz):
-    # convert chdg to radians
-    chdg = np.deg2rad(chdg)
+# calculate heading for maneuver plane
+def mPlane(chdg, vel3d:Point):
     ghdg = np.arctan2(vel3d.y, vel3d.x)
     # constrain heading to chdg or pi+chdg
     if np.abs(wrapPi(ghdg - chdg)) > np.pi/2:
         hdg = wrapPi(chdg + np.pi)
     else:
         hdg = chdg
-    return
+    return hdg
 
 # rhdg: maneuver heading in radians: contest frame?
 # quat: body to contest? rotation
 # return: [roll, pitch, wca, wca_axis]
-def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
-    # given maneuver heading rhdg, calculate roll angle as angle between
+def maneuverRPY(rhdg: float, state: State, enu2ned: Transformation) -> [float, float, float, Point]:
+    quat = state.att
+
+    # given runway heading rhdg, calculate roll angle as angle between
     # rhdg/earthz plane and body x/y plane
     #hv = Point(cos(rdhg), sin(rhdg), 0)
+    # velocity in contest frame?
+    vel3d = state.vel
+    quat.transform_point(vel3d)
+    rhdg = mPlane(rhdg, vel3d)
 
     # this hzplane requires maneuvers to lie in a vertical plane
     hzplane = Point(-sin(rhdg), cos(rhdg), 0);
@@ -157,7 +163,7 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     wca_axis = cross_product(bx, hzplane);
     wca = (np.pi/2) - np.arctan2(vector_norm(wca_axis), dot_product(bx, hzplane));
     if abs(wca) > 12*np.pi/180:
-      print('large wca: {:.1f}'.format(wca))
+      print('large wca: {:.1f} degrees'.format(wca*180/np.pi))
 
     # to back out wca, rotate about cross(bx, hzplane)
     wca_axis = normalize_vector(wca_axis)
@@ -182,7 +188,9 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     thetar = abs(axisr)
     axisr /= thetar
     direction = dot_product(axisr, Point(1, 0, 0))
-    roll = np.sign(direction) * wrapPi(thetar)
+    # roll = np.sign(direction) * wrapPi(thetar)
+    # hack to invert roll
+    roll = np.sign(direction) * wrapPi(thetar + np.pi)
 
     return [roll, pitch, wca, wca_axis]
 
@@ -193,8 +201,7 @@ def meshes(obj, npoints, seq, colour, enu2ned):
              for i in range(0, npoints+1) ]
     return [
         obj.transform(state[i].transform).create_mesh(
-            rollColorName(maneuverRPY(0, (state[i].att))[0]),
-                # enu2ned.quat(state[i].att).to_euler().x),
+            rollColorName(maneuverRPY(0, state[i], enu2ned)[0]),
             "{:.1f}".format(start + (end-start) * i / npoints))
         for i in range(0, npoints+1)
     ]
@@ -217,7 +224,8 @@ def ribbon(scale, seq, enu2ned):
     y = [ctr.y, curLeft.y, curRight.y]
     z = [ctr.z, curLeft.z, curRight.z]
     faces = []
-    [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(0).att)
+
+    [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(0), enu2ned)
     facecolor = rollColor(roll)
     # facecolor = rollColor(enu2ned.quat(seq.get_state_from_index(0).att).to_euler().x)
     facecolors = [facecolor, facecolor, facecolor]
@@ -235,8 +243,8 @@ def ribbon(scale, seq, enu2ned):
         y.extend([nextctr.y, nextLeft.y, nextRight.y])
         z.extend([nextctr.z, nextLeft.z, nextRight.z])
 
-        [roll, pitch, wca, wca_axis] = maneuverRPY(0, (seq.get_state_from_index(i).att))
-        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, enu2ned.quat(seq.get_state_from_index(i).att))
+        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i), enu2ned)
+        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, enu2ned.quat(seq.get_state_from_index(i)))
 
         # facecolor = rollColor(enu2ned.quat(seq.get_state_from_index(i).att).to_euler().x)
 
@@ -286,10 +294,10 @@ def cgtrace(seq, name="cgtrace"):
 
 def tiptrace(seq, span, enu2ned):
     def rpyd(i):
-        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
+        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i), enu2ned)
         # return enu2ned.quat(seq.get_state_from_index(i).att).to_euler() * 180/np.pi
         return Point(roll, -pitch, wca) * 180/np.pi
-    text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, yaw: {:.1f}".format(
+    text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
         seq.data.index[i], rpyd(i).x, rpyd(i).y, rpyd(i).z)
             for i in range(seq.data.shape[0])]
 
