@@ -34,3 +34,10 @@ def plotdtw(flown, segments):
     )
 
     return fig
+
+
+
+def create_3d_plot(traces):
+    return go.Figure(
+        traces,
+        layout=go.Layout(template="flight3d+judge_view"))

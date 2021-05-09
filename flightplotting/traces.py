@@ -37,7 +37,7 @@ def meshes(obj, npoints, seq, colour):
     ]
 
 
-def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
+def trace3d(datax, datay, dataz, colour='black', width=2, text=None, name="trace3d"):
     return go.Scatter3d(
         x=datax,
         y=datay,
@@ -45,16 +45,50 @@ def trace3d(datax, datay, dataz, colour='black', width=2, text=None):
         line=dict(color=colour, width=width),
         mode='lines',
         text=text,
-        hoverinfo="text"
+        hoverinfo="text",
+        name=name
     )
 
 
-def cgtrace(seq):
+def cgtrace(seq, name="cgtrace"):
     return trace3d(
         *seq.pos.to_numpy().T,
         colour="black",
-        text=["{:.1f}".format(val) for val in seq.data.index]
+        text=["{:.1f}".format(val) for val in seq.data.index],
+        name=name
     )
+
+def manoeuvretraces(seq):
+    traces = []
+    for name, manoeuvre in seq.split_manoeuvres().items():
+        traces.append(go.Scatter3d(
+            x=manoeuvre.x,
+            y=manoeuvre.y,
+            z=manoeuvre.z,
+            mode='lines',
+            text=manoeuvre.element,
+            hoverinfo="text",
+            name=name
+        ))
+
+    return traces
+
+
+def elementtraces(seq):
+    traces = []
+    for name, element in seq.split_elements().items():
+        traces.append(go.Scatter3d(
+            x=element.x,
+            y=element.y,
+            z=element.z,
+            mode='lines',
+            text=element.manoeuvre,
+            hoverinfo="text",
+            name=name
+        ))
+
+    return traces
+
 
 
 def tiptrace(seq, span):
@@ -76,10 +110,18 @@ def tiptrace(seq, span):
     ]
 
 
-def create_3d_plot(traces):
-    return go.Figure(
-        traces,
-        layout=go.Layout(template="flight3d+judge_view"))
+def axis_rate_trace(sec, ab = False):
+    if ab:
+        return [
+            go.Scatter(x=sec.data.index, y=abs(sec.brvr), name="r"),
+            go.Scatter(x=sec.data.index, y=sec.brvp, name="p"),
+            go.Scatter(x=sec.data.index, y=abs(sec.brvy), name="y")]
+    else:
+        return [
+            go.Scatter(x=sec.data.index, y=sec.brvr, name="r"),
+            go.Scatter(x=sec.data.index, y=sec.brvp, name="p"),
+            go.Scatter(x=sec.data.index, y=sec.brvy, name="y")]
+
 
 def _axistrace(cid):
     return trace3d(*cid.get_plot_df(20).to_numpy().T)
