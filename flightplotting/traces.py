@@ -129,8 +129,11 @@ def wrapPi(r, hyst=0):
     return r
 
 # calculate heading for maneuver plane
+# TODO: extend this to find and use maneuver plane only on vertical lines
+#       Otherwise use normal Euler fixed angles
 def mPlane(chdg, vel3d:Point):
     ghdg = np.arctan2(vel3d.y, vel3d.x)
+
     # constrain heading to chdg or pi+chdg
     if np.abs(wrapPi(ghdg - chdg)) > np.pi/2:
         hdg = wrapPi(chdg + np.pi)
@@ -224,11 +227,7 @@ def ribbon(scale, seq, enu2ned):
     y = [ctr.y, curLeft.y, curRight.y]
     z = [ctr.z, curLeft.z, curRight.z]
     faces = []
-
-    [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(0), enu2ned)
-    facecolor = rollColor(roll)
-    # facecolor = rollColor(enu2ned.quat(seq.get_state_from_index(0).att).to_euler().x)
-    facecolors = [facecolor, facecolor, facecolor]
+    facecolors = []
 
     ctrIndex = 0
     for i in range(1, seq.data.shape[0]):
@@ -245,9 +244,6 @@ def ribbon(scale, seq, enu2ned):
 
         [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i), enu2ned)
         # [roll, pitch, wca, wca_axis] = maneuverRPY(0, enu2ned.quat(seq.get_state_from_index(i)))
-
-        # facecolor = rollColor(enu2ned.quat(seq.get_state_from_index(i).att).to_euler().x)
-
         facecolor = rollColor(roll)
 
         # clockwise winding direction
