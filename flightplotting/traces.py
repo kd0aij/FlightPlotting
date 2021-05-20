@@ -7,7 +7,7 @@ from geometry import Point, Coord, Quaternion, Transformation
 from geometry.point import vector_norm, normalize_vector, dot_product, cross_product
 import numpy as np
 from typing import List, Union
-from math import cos, sin, tan, radians
+from math import cos, sin, tan, radians, asin, copysign, sqrt, pi
 
 
 # distance from pilot box to runway centerline
@@ -122,11 +122,108 @@ def rollColor(roll):
         return red
 
 def wrapPi(r, hyst=0):
-    while r > np.pi + hyst:
-        r -= 2*np.pi
+    while r > pi + hyst:
+        r -= 2*pi
     while r < -180 - hyst:
-        r += 2*np.pi
+        r += 2*pi
     return r
+
+def getManeuverPlane(rhdg, ghdg):
+    # constrain maneuver hdg to box or cross-box
+    revhdg = wrapPi(rhdg + pi)
+    chdg = wrapPi(rhdg + pi/2)
+    if abs(ghdg - rhdg) < pi/4:
+      mhdg = rhdg;
+    elif abs(ghdg - revhdg) < pi/4:
+      mhdg = revhdg;
+    elif abs(ghdg - chdg) < pi/4:
+      mhdg = chdg;
+    else:
+      mhdg = wrapPi(chdg + pi)
+
+    return mhdg
+
+# generate maneuver RPY for each element of a Section
+def genManeuverRPY(seq, rhdg, mingspd, pThresh):
+    N = seq.data.shape[0]
+    roll = np.empty(N)
+    pitch = np.empty(N)
+    wca = np.empty(N)
+    xwnd = np.empty(N)
+    wca_axis = []
+    mhdg = np.empty(N)
+    
+    
+    # calculate ground heading qualified by a minimum groundspeed: mingspd
+    # retain previous heading while speed is below mingspd
+    ghdg = np.zeros(N)
+    ghdg[1] = rhdg;
+    for i in range(0, N):
+      bvel = seq.get_state_from_index(i).bvel
+      spd = sqrt(bvel.x**2 + bvel.y**2)
+      if spd > mingspd:
+        ghdg[i] = np.arctan2(bvel.x, bvel.y)
+      else:
+        ghdg[i] = ghdg[i-1]
+        
+        
+    onVertical = False
+    hyst = 1
+    mplanes = []
+    mplane = {"hdg":0,"pos":Point(0,0,0),"entry":False}
+
+    for i in range(1, N):
+        curState = seq.get_state_from_index(i)
+        e_pitch = eulerPitch(curState.att)
+        # determine maneuver heading based on whether this is a vertical line
+        if onVertical:
+            # maneuver heading is current mplane heading
+            mplane["hdg"] = getManeuverPlane(rhdg, ghdg[i])
+            mhdg[i] = mplane["hdg"]
+            
+            # check for exit from vertical line
+            if (abs(e_pitch) < (pThresh - hyst)):
+              onVertical = 0;
+              # on exit from vertical line
+              # use ground heading to define maneuver plane
+              print("exit from vertical line")
+              # set maneuver plane heading to current ground heading
+              mplane["hdg"] = ghdg[i]
+              mplane["pos"] = curState.pos
+              mplane["entry"] = False
+              print("rotated maneuver heading: {:3.0f}".format(mplane["hdg"]))
+              # record ground heading maneuver plane
+              mplanes.append(mplane)
+              mhdg[i] = ghdg[i];
+        else:
+            # maneuver heading is just ground heading
+            mhdg[i] = ghdg[i];
+            
+            # entering vertical line if pitch > threshold
+            if (abs(e_pitch) > (pThresh)):
+              onVertical = 1;
+              # on entry to vertical line:
+              print("entry to vertical line")
+              # pick aerobatic box heading using previous ground heading
+              mplane["hdg"] = getManeuverPlane(rhdg, ghdg[i])
+              mplane["pos"] = curState.pos
+              mplane["entry"] = True
+              mhdg[i] = mplane["hdg"];
+              print("rotated maneuver heading: {:3.0f}".format(mplane["hdg"]))
+              # record vertical maneuver plane
+              mplanes.append(mplane)
+
+        [roll[i], pitch[i], wca[i], axis] = maneuverRPY(mhdg[i], curState.att)
+        wca_axis.append(axis)
+        
+        if abs(wca[i]) > 12:
+          print("large wca: {:5.1f}".format(wca[i]))
+          
+        # crosswind is ~ |vENU|*sin(wca): so percentage of earthframe velocity is:
+        xwnd[i] = 100 * abs(np.sin(wca[i]))
+        
+    return roll
+
 
 # calculate heading for maneuver plane
 # TODO: extend this to find and use maneuver plane only on vertical lines
@@ -135,43 +232,48 @@ def mPlane(chdg, vel3d:Point):
     ghdg = np.arctan2(vel3d.y, vel3d.x)
 
     # constrain heading to chdg or pi+chdg
-    if np.abs(wrapPi(ghdg - chdg)) > np.pi/2:
-        hdg = wrapPi(chdg + np.pi)
+    if np.abs(wrapPi(ghdg - chdg)) > pi/2:
+        hdg = wrapPi(chdg + pi)
     else:
         hdg = chdg
     return hdg
 
+def eulerPitch(q: Quaternion):
+    _sinp = 2 * (q.w * q.y - q.z * q.x)
+    if abs(_sinp) >= 1:
+        pitch = copysign(pi / 2, _sinp)
+    else:
+        pitch = asin(_sinp)
+        
+    return pitch
+
 # rhdg: maneuver heading in radians: contest frame?
 # quat: body to contest? rotation
 # return: [roll, pitch, wca, wca_axis]
-def maneuverRPY(rhdg: float, state: State, enu2ned: Transformation) -> [float, float, float, Point]:
-    quat = state.att
-
-    # given runway heading rhdg, calculate roll angle as angle between
+def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
+    # given maneuver heading rhdg, calculate roll angle as angle between
     # rhdg/earthz plane and body x/y plane
-    #hv = Point(cos(rdhg), sin(rhdg), 0)
-    # velocity in contest frame?
-    vel3d = state.vel
-    quat.transform_point(vel3d)
-    rhdg = mPlane(rhdg, vel3d)
-
-    # this hzplane requires maneuvers to lie in a vertical plane
-    hzplane = Point(-sin(rhdg), cos(rhdg), 0);
     bx = quat.transform_point(Point(1, 0, 0));
+    # rhdg = mPlane(rhdg, vel3d)
+
+    # hzplane is the normal vector which defines the maneuver plane 
+    # this hzplane requires maneuvers to lie in a vertical plane parallel to rhdg
+    hzplane = Point(-sin(rhdg), cos(rhdg), 0);
+
+  # a more general version would allow the maneuver plane to be non-vertical
+  # where mplane is (hv cross earthz) rotated about hv by a roll angle
+##  hv = Point(cosd(rhdg), sind(rhdg) 0);
+##  hzplane = cross_product(hv, mplane);
 
     # the wind correction angle (WCA) relative to flight path is the
     # angle between body frame x and hzplane
     # This should be independent of roll and pitch: roll does not affect the direction
     # of bx and pitch is a rotation about hzplane, which does not change the angle
     wca_axis = cross_product(bx, hzplane);
-    wca = (np.pi/2) - np.arctan2(vector_norm(wca_axis), dot_product(bx, hzplane));
-    if abs(wca) > 12*np.pi/180:
-      print('large wca: {:.1f} degrees'.format(wca*180/np.pi))
+    wca = (pi/2) - np.arctan2(vector_norm(wca_axis), dot_product(bx, hzplane));
 
     # to back out wca, rotate about cross(bx, hzplane)
     wca_axis = normalize_vector(wca_axis)
-
-    # this will be inv(quatc) if correct
     r2hzp = Quaternion.from_axis_angle(wca_axis * -wca)
 
     # this is the attitude with body x rotated into maneuver plane
@@ -180,6 +282,12 @@ def maneuverRPY(rhdg: float, state: State, enu2ned: Transformation) -> [float, f
     # calculate Euler pitch in maneuver plane
     rpy = fq.to_euler()
     pitch = rpy.y
+
+    # HACK: reverse rhdg if sign of euler yaw is different from that of rhdg
+    # this is detecting a reversal in ground course at low gspd, but I had thought
+    # that flipping the hzplane normal shouldn't affect the results
+    if np.sign(rpy.z) != np.sign(rhdg):
+        rhdg = wrapPi(rhdg + pi)
 
     # back out rhdg and pitch
     ryaw = Quaternion.from_axis_angle(Point(0, 0, 1) * -rhdg)
@@ -191,9 +299,8 @@ def maneuverRPY(rhdg: float, state: State, enu2ned: Transformation) -> [float, f
     thetar = abs(axisr)
     axisr /= thetar
     direction = dot_product(axisr, Point(1, 0, 0))
-    # roll = np.sign(direction) * wrapPi(thetar)
-    # hack to invert roll
-    roll = np.sign(direction) * wrapPi(thetar + np.pi)
+    # invert roll relative to Octave implementation
+    roll = np.sign(direction) * wrapPi(thetar + pi)
 
     return [roll, pitch, wca, wca_axis]
 
@@ -204,7 +311,7 @@ def meshes(obj, npoints, seq, colour, enu2ned):
              for i in range(0, npoints+1) ]
     return [
         obj.transform(state[i].transform).create_mesh(
-            rollColorName(maneuverRPY(0, state[i], enu2ned)[0]),
+            rollColorName(maneuverRPY(0, state[i].att)[0]),
             "{:.1f}".format(start + (end-start) * i / npoints))
         for i in range(0, npoints+1)
     ]
@@ -212,7 +319,7 @@ def meshes(obj, npoints, seq, colour, enu2ned):
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
 # and origin to next left/right wingtip
-def ribbon(scale, seq, enu2ned):
+def ribbon(scale, seq, enu2ned, roll):
     left  = Point(0, -scale/2, 0)
     right = Point(0,  scale/2, 0)
 
@@ -242,9 +349,9 @@ def ribbon(scale, seq, enu2ned):
         y.extend([nextctr.y, nextLeft.y, nextRight.y])
         z.extend([nextctr.z, nextLeft.z, nextRight.z])
 
-        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i), enu2ned)
+        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
         # [roll, pitch, wca, wca_axis] = maneuverRPY(0, enu2ned.quat(seq.get_state_from_index(i)))
-        facecolor = rollColor(roll)
+        facecolor = rollColor(roll[i])
 
         # clockwise winding direction
         faces.append([ctrIndex, ctrIndex+1, ctrIndex+4])
@@ -322,9 +429,9 @@ def elementtraces(seq):
 
 def tiptrace(seq, span, enu2ned):
     def rpyd(i):
-        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i), enu2ned)
-        # return enu2ned.quat(seq.get_state_from_index(i).att).to_euler() * 180/np.pi
-        return Point(roll, -pitch, wca) * 180/np.pi
+        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
+        # return enu2ned.quat(seq.get_state_from_index(i).att).to_euler() * 180/pi
+        return Point(roll, -pitch, wca) * 180/pi
     text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
         seq.data.index[i], rpyd(i).x, rpyd(i).y, rpyd(i).z)
             for i in range(seq.data.shape[0])]
