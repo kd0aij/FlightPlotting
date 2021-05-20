@@ -87,7 +87,7 @@ def boxfrustumEdges():
         name='box edges'
     )]
 
-levelThresh = radians(10)
+levelThresh = radians(15)
 def rollColorName(roll):
     absroll = abs(roll)
     if absroll < levelThresh:
@@ -144,7 +144,7 @@ def getManeuverPlane(rhdg, ghdg):
     return mhdg
 
 # generate maneuver RPY for each element of a Section
-def genManeuverRPY(seq, rhdg, mingspd, pThresh):
+def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
     N = seq.data.shape[0]
     roll = np.empty(N)
     pitch = np.empty(N)
@@ -174,7 +174,9 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh):
 
     for i in range(1, N):
         curState = seq.get_state_from_index(i)
-        e_pitch = eulerPitch(curState.att)
+        # tranform attitude back to NED to match ghdg
+        att = enu2ned.quat(seq.get_state_from_index(i).att)
+        e_pitch = eulerPitch(att)
         # determine maneuver heading based on whether this is a vertical line
         if onVertical:
             # maneuver heading is current mplane heading
@@ -213,7 +215,9 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh):
               # record vertical maneuver plane
               mplanes.append(mplane)
 
-        [roll[i], pitch[i], wca[i], axis] = maneuverRPY(mhdg[i], curState.att)
+        [roll[i], pitch[i], wca[i], axis] = maneuverRPY(mhdg[i], att)
+        # invert roll
+        roll[i] = wrapPi(roll[i] + pi)
         wca_axis.append(axis)
         
         if abs(wca[i]) > 12:
