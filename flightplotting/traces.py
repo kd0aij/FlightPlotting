@@ -159,23 +159,27 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
     ghdg = np.zeros(N)
     ghdg[1] = rhdg;
     for i in range(0, N):
-      bvel = seq.get_state_from_index(i).bvel
-      spd = sqrt(bvel.x**2 + bvel.y**2)
+      vel = enu2ned.rotate(seq.get_state_from_index(i).vel)
+      spd = sqrt(vel.x**2 + vel.y**2)
       if spd > mingspd:
-        ghdg[i] = np.arctan2(bvel.x, bvel.y)
+        ghdg[i] = np.arctan2(vel.y, vel.x)
       else:
         ghdg[i] = ghdg[i-1]
         
         
     onVertical = False
-    hyst = 1
+    hyst = np.radians(1)
     mplanes = []
     mplane = {"hdg":0,"pos":Point(0,0,0),"entry":False}
 
     for i in range(1, N):
         curState = seq.get_state_from_index(i)
+        t = seq.data.index[i]
         # tranform attitude back to NED to match ghdg
-        att = enu2ned.quat(seq.get_state_from_index(i).att)
+        # att = seq.get_state_from_index(i).att
+        # just rotate about z to world frame runway heading
+        zrot = Quaternion.from_axis_angle(Point(0, 0, rhdg))
+        att = zrot * seq.get_state_from_index(i).att
         e_pitch = eulerPitch(att)
         # determine maneuver heading based on whether this is a vertical line
         if onVertical:
@@ -193,7 +197,8 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
               mplane["hdg"] = ghdg[i]
               mplane["pos"] = curState.pos
               mplane["entry"] = False
-              print("rotated maneuver heading: {:3.0f}".format(mplane["hdg"]))
+              print("t: {:5.1f} pitch: {:3.1f}, maneuver heading: {:3.0f}, ghdg: {:3.0f}".format(
+                  t, np.degrees(e_pitch), np.degrees(mplane["hdg"]), np.degrees(ghdg[i])))
               # record ground heading maneuver plane
               mplanes.append(mplane)
               mhdg[i] = ghdg[i];
@@ -211,22 +216,23 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
               mplane["pos"] = curState.pos
               mplane["entry"] = True
               mhdg[i] = mplane["hdg"];
-              print("rotated maneuver heading: {:3.0f}".format(mplane["hdg"]))
+              print("t: {:5.1f} pitch: {:3.1f}, maneuver heading: {:3.0f}, ghdg: {:3.0f}".format(
+                  t, np.degrees(e_pitch), np.degrees(mplane["hdg"]), np.degrees(ghdg[i])))
               # record vertical maneuver plane
               mplanes.append(mplane)
 
         [roll[i], pitch[i], wca[i], axis] = maneuverRPY(mhdg[i], att)
         # invert roll
-        roll[i] = wrapPi(roll[i] + pi)
+        # roll[i] = wrapPi(roll[i] + pi)
         wca_axis.append(axis)
         
-        if abs(wca[i]) > 12:
-          print("large wca: {:5.1f}".format(wca[i]))
+        # if abs(wca[i]) > np.radians(12):
+        #   print("large wca: {:5.1f}".format(np.degrees(wca[i])))
           
         # crosswind is ~ |vENU|*sin(wca): so percentage of earthframe velocity is:
         xwnd[i] = 100 * abs(np.sin(wca[i]))
         
-    return roll
+    return [roll, pitch, wca, axis]
 
 
 # calculate heading for maneuver plane
@@ -323,7 +329,7 @@ def meshes(obj, npoints, seq, colour, enu2ned):
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
 # and origin to next left/right wingtip
-def ribbon(scale, seq, enu2ned, roll):
+def ribbon(scale, seq, roll):
     left  = Point(0, -scale/2, 0)
     right = Point(0,  scale/2, 0)
 
@@ -353,8 +359,6 @@ def ribbon(scale, seq, enu2ned, roll):
         y.extend([nextctr.y, nextLeft.y, nextRight.y])
         z.extend([nextctr.z, nextLeft.z, nextRight.z])
 
-        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
-        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, enu2ned.quat(seq.get_state_from_index(i)))
         facecolor = rollColor(roll[i])
 
         # clockwise winding direction
@@ -431,14 +435,17 @@ def elementtraces(seq):
     return traces
 
 
-def tiptrace(seq, span, enu2ned):
+def tiptrace(seq, span, roll, pitch, wca):
     def rpyd(i):
-        [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
+        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
         # return enu2ned.quat(seq.get_state_from_index(i).att).to_euler() * 180/pi
-        return Point(roll, -pitch, wca) * 180/pi
+        return Point(roll[i], pitch[i], wca[i]) * 180/pi
     text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
         seq.data.index[i], rpyd(i).x, rpyd(i).y, rpyd(i).z)
             for i in range(seq.data.shape[0])]
+    # text = ["t:{:.1f}, roll: {:.1f}".format(
+    #     seq.data.index[i], roll[i] * 180/pi)
+    #         for i in range(seq.data.shape[0])]
 
     def make_offset_trace(pos, name, colour, text):
         return trace3d(
