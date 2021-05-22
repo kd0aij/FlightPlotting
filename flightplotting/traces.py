@@ -236,8 +236,8 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
         # roll[i] = wrapPi(roll[i] + pi)
         wca_axis.append(axis)
         
-        # if abs(wca[i]) > np.radians(12):
-        #   print("large wca: {:5.1f}".format(np.degrees(wca[i])))
+        if abs(wca[i]) > np.radians(12):
+          print("large wca: {:5.1f}".format(np.degrees(wca[i])))
           
         # crosswind is ~ |vENU|*sin(wca): so percentage of earthframe velocity is:
         xwnd[i] = 100 * abs(np.sin(wca[i]))
@@ -324,16 +324,17 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
 
     return [roll, pitch, wca, wca_axis]
 
-def meshes(obj, npoints, seq, colour, enu2ned):
+def meshes(obj, nModels, seq, roll):
     start = seq.data.index[0]
     end = seq.data.index[-1]
-    state = [ seq.get_state_from_time(start + (end-start) * i / npoints)
-             for i in range(0, npoints+1) ]
+    index = [ seq.data.index.get_loc(start + (end-start) * i / nModels, method='nearest')
+             for i in range(0, nModels+1) ]
+    color = [ rollColorName(roll[index[i]]) for i in range(0, nModels+1) ]
+    state = [ seq.get_state_from_index(index[i]) for i in range(0, nModels+1) ]
     return [
-        obj.transform(state[i].transform).create_mesh(
-            rollColorName(maneuverRPY(0, state[i].att)[0]),
-            "{:.1f}".format(start + (end-start) * i / npoints))
-        for i in range(0, npoints+1)
+        obj.transform(state[i].transform).create_mesh( color[i],
+            "{:.1f}".format(start + (end-start) * i / nModels))
+        for i in range(0, nModels+1)
     ]
 
 # create a mesh for a "ribbon" plot
