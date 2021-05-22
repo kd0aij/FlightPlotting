@@ -156,10 +156,15 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
     
     # calculate ground heading qualified by a minimum groundspeed: mingspd
     # retain previous heading while speed is below mingspd
+    # vel has been rotated into ENU frame; not sure whether it is also rotated to contest frame
+    # rhdg = 0
     ghdg = np.zeros(N)
     ghdg[1] = rhdg;
     for i in range(0, N):
-      vel = enu2ned.rotate(seq.get_state_from_index(i).vel)
+      vel = seq.get_state_from_index(i).vel
+      # vel = enu2ned.rotate(seq.get_state_from_index(i).vel)
+      # try inverse transform
+      vel = enu2ned.rotation.inverse().transform_point(seq.get_state_from_index(i).vel)
       spd = sqrt(vel.x**2 + vel.y**2)
       if spd > mingspd:
         ghdg[i] = np.arctan2(vel.y, vel.x)
@@ -175,11 +180,16 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
     for i in range(1, N):
         curState = seq.get_state_from_index(i)
         t = seq.data.index[i]
-        # tranform attitude back to NED to match ghdg
-        # att = seq.get_state_from_index(i).att
-        # just rotate about z to world frame runway heading
+        att = seq.get_state_from_index(i).att
+        
+        # rotate back to NED
+        # att = enu2ned.rotation.inverse() * att
+        # att = enu2ned.rotation * att
+        
+        # rotate about z to world frame runway heading
         zrot = Quaternion.from_axis_angle(Point(0, 0, rhdg))
         att = zrot * seq.get_state_from_index(i).att
+        
         e_pitch = eulerPitch(att)
         # determine maneuver heading based on whether this is a vertical line
         if onVertical:
