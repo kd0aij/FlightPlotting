@@ -162,7 +162,7 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
     ghdg[1] = rhdg;
     for i in range(0, N):
       vel = seq.get_state_from_index(i).vel
-      # vel = enu2ned.rotate(seq.get_state_from_index(i).vel)
+      # vel = enu2ned.rotate(seq.get_state_from_index[i].vel)
       # try inverse transform
       vel = enu2ned.rotation.inverse().transform_point(seq.get_state_from_index(i).vel)
       spd = sqrt(vel.x**2 + vel.y**2)
@@ -324,18 +324,29 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
 
     return [roll, pitch, wca, wca_axis]
 
-def meshes(obj, nModels, seq, roll):
+def meshes(obj, nModels, seq, roll, pitch, wca):
     start = seq.data.index[0]
     end = seq.data.index[-1]
     index = [ seq.data.index.get_loc(start + (end-start) * i / nModels, method='nearest')
              for i in range(0, nModels+1) ]
     color = [ rollColorName(roll[index[i]]) for i in range(0, nModels+1) ]
     state = [ seq.get_state_from_index(index[i]) for i in range(0, nModels+1) ]
-    return [
-        obj.transform(state[i].transform).create_mesh( color[i],
-            "{:.1f}".format(start + (end-start) * i / nModels))
-        for i in range(0, nModels+1)
-    ]
+    text = [ "t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
+            seq.data.index[index[i]], 
+            np.degrees(roll[index[i]]), 
+            np.degrees(pitch[index[i]]), 
+            np.degrees(wca[index[i]]))
+        for i in range(0, nModels+1) ]
+
+    result = [ obj.transform(state[0].transform).create_mesh( color[0], text[0], True) ]
+    result.extend([
+        obj.transform(state[i].transform).create_mesh( color[i], text[i])
+            # "{:.1f}".format(start + (end-start) * i / nModels))
+        for i in range(1, nModels+1)
+    ])
+    return result
+
+
 
 # create a mesh for a "ribbon" plot
 # 3 triangles for each pair of poses: current origin to each current/next wingtip
@@ -392,7 +403,8 @@ def ribbon(scale, seq, roll):
         hoverinfo="none"
     )]
 
-def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None):
+def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None, 
+            legendgroup="", showlegend=False):
     return go.Scatter3d(
         x=datax,
         y=datay,
@@ -401,7 +413,9 @@ def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None):
         mode='lines',
         text=text,
         hoverinfo="text",
-        name=name
+        name=name,
+        legendgroup=legendgroup,
+        showlegend=showlegend
     )
 
 
@@ -447,29 +461,28 @@ def elementtraces(seq):
 
 
 def tiptrace(seq, span, roll, pitch, wca):
-    def rpyd(i):
-        # [roll, pitch, wca, wca_axis] = maneuverRPY(0, seq.get_state_from_index(i).att)
-        # return enu2ned.quat(seq.get_state_from_index(i).att).to_euler() * 180/pi
-        return Point(roll[i], pitch[i], wca[i]) * 180/pi
     text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
-        seq.data.index[i], rpyd(i).x, rpyd(i).y, rpyd(i).z)
+                seq.data.index[i], 
+                np.degrees(roll[i]), 
+                np.degrees(pitch[i]), 
+                np.degrees(wca[i]))
             for i in range(seq.data.shape[0])]
-    # text = ["t:{:.1f}, roll: {:.1f}".format(
-    #     seq.data.index[i], roll[i] * 180/pi)
-    #         for i in range(seq.data.shape[0])]
 
-    def make_offset_trace(pos, name, colour, text):
+    def make_offset_trace(pos, name, colour, text, showlegend):
         return trace3d(
             *seq.body_to_world(pos).data.T,
             name=name,
             colour=colour,
             text=text,
-            width=1
+            width=1,
+            legendgroup="tiptrace",
+            showlegend=showlegend
         )
+    
 
     return [
-        make_offset_trace(Point(0, span/2, 0), "starboard", "green", text),
-        make_offset_trace(Point(0, -span/2, 0), "port", "red", text)
+        make_offset_trace(Point(0, span/2, 0), "tiptraces", "green", text, True),
+        make_offset_trace(Point(0, -span/2, 0), "port", "red", text, False)
     ]
 
 

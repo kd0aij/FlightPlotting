@@ -51,7 +51,7 @@ class OBJ(object):
     def scale(self, scale_factor):
         return OBJ(self.vertices * scale_factor, self.faces)
 
-    def create_mesh(self, colour='orange', name: str = ''):
+    def create_mesh(self, colour='orange', name: str = '', showlegend=False):
         """Generate a Mesh3d of my plane transformed by the requested transformation.
 
         Args:
@@ -65,8 +65,11 @@ class OBJ(object):
         I, J, K = self.faces.T
         return go.Mesh3d(
             x=x, y=y, z=z, i=I, j=J, k=K,
-            name=name,
+            name='Icons',
+            text=name,
             showscale=False,
-            hoverinfo="name",
+            showlegend=showlegend,
+            legendgroup="vehicleIcon",
+            hoverinfo="text",
             color=colour
         )  # vertexcolor=vertices[:, 3:], #the color codes must be triplets of floats  in [0,1]!!
