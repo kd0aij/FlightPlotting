@@ -3,9 +3,9 @@ import flightplotting.templates
 from flightplotting.traces import tiptrace, meshes
 
 
-def plotsec(sec, obj, scale=10, nmodels=20, fig=None, color="orange"):
+def plotsec(sec, obj, scale=10, iconInterval=1, fig=None, color="orange"):
     traces = tiptrace(sec, scale * 1.85) + \
-        meshes(obj.scale(scale), nmodels, sec, color)
+        meshes(obj.scale(scale), iconInterval, sec, color)
 
     if fig is None:
         fig = go.Figure(

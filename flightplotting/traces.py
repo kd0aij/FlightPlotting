@@ -164,7 +164,7 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
       vel = seq.get_state_from_index(i).vel
       # vel = enu2ned.rotate(seq.get_state_from_index[i].vel)
       # try inverse transform
-      vel = enu2ned.rotation.inverse().transform_point(seq.get_state_from_index(i).vel)
+      # vel = enu2ned.rotation.inverse().transform_point(seq.get_state_from_index(i).vel)
       spd = sqrt(vel.x**2 + vel.y**2)
       if spd > mingspd:
         ghdg[i] = np.arctan2(vel.y, vel.x)
@@ -319,29 +319,26 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     thetar = abs(axisr)
     axisr /= thetar
     direction = dot_product(axisr, Point(1, 0, 0))
+    roll = np.sign(direction) * wrapPi(thetar)
     # invert roll relative to Octave implementation
-    roll = np.sign(direction) * wrapPi(thetar + pi)
+    # roll = wrapPi(roll + pi)
 
     return [roll, pitch, wca, wca_axis]
 
-def meshes(obj, nModels, seq, roll, pitch, wca):
+def meshes(obj, iconInterval, seq, roll, pitch, wca):
     start = seq.data.index[0]
-    end = seq.data.index[-1]
-    index = [ seq.data.index.get_loc(start + (end-start) * i / nModels, method='nearest')
+    end = seq.data.index[-1]    
+    nModels = round((end-start) / iconInterval)
+    index = [ seq.data.index.get_loc(start + i * iconInterval, method='nearest')
              for i in range(0, nModels+1) ]
     color = [ rollColorName(roll[index[i]]) for i in range(0, nModels+1) ]
     state = [ seq.get_state_from_index(index[i]) for i in range(0, nModels+1) ]
-    text = [ "t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
-            seq.data.index[index[i]], 
-            np.degrees(roll[index[i]]), 
-            np.degrees(pitch[index[i]]), 
-            np.degrees(wca[index[i]]))
-        for i in range(0, nModels+1) ]
+    text = [ rpyText( seq.data.index[index[i]], roll[index[i]], pitch[index[i]], wca[index[i]])
+            for i in range(0, nModels+1) ]
 
     result = [ obj.transform(state[0].transform).create_mesh( color[0], text[0], True) ]
     result.extend([
         obj.transform(state[i].transform).create_mesh( color[i], text[i])
-            # "{:.1f}".format(start + (end-start) * i / nModels))
         for i in range(1, nModels+1)
     ])
     return result
@@ -459,13 +456,22 @@ def elementtraces(seq):
 
     return traces
 
-
+def rpyText(t, roll, pitch, wca):
+    # report roll error relative to upright/inverted/knife-edge
+    if abs(abs(roll) - pi) < pi/4: # inverted
+        rollErr = "inv{:.0f}".format(np.degrees(wrapPi(roll+pi)))
+    elif abs(roll - pi/2) < pi/4: # right knife-edge
+        rollErr = "rke{:.0f}".format(np.degrees(wrapPi(roll-pi/2)))
+    elif abs(roll + pi/2) < pi/4: # left knife-edge
+        rollErr = "lke{:.0f}".format(np.degrees(wrapPi(roll+pi/2)))
+    else: # upright
+        rollErr = "upr{:.0f}".format(np.degrees(roll))
+    
+    return "t:{:.1f}, roll: {}, pitch: {:.1f}, wca: {:.1f}".format(
+                t, rollErr, np.degrees(pitch), np.degrees(wca))
+    
 def tiptrace(seq, span, roll, pitch, wca):
-    text = ["t:{:.1f}, roll: {:.1f}, pitch: {:.1f}, wca: {:.1f}".format(
-                seq.data.index[i], 
-                np.degrees(roll[i]), 
-                np.degrees(pitch[i]), 
-                np.degrees(wca[i]))
+    text = [ rpyText( seq.data.index[i], roll[i], pitch[i], wca[i])
             for i in range(seq.data.shape[0])]
 
     def make_offset_trace(pos, name, colour, text, showlegend):
