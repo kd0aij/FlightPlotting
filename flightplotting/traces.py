@@ -167,8 +167,6 @@ def genManeuverRPY(seq, mingspd, pThresh):
       vel = seq.get_state_from_index(i).vel
       spd = sqrt(vel.x**2 + vel.y**2)
       if spd > mingspd:
-        # this matches current Octave code, but looks like it's either wrong or 
-        # needs vNED instead of vENU
         ghdg[i] = np.arctan2(vel.x, vel.y)
       else:
         ghdg[i] = ghdg[i-1]
@@ -229,8 +227,6 @@ def genManeuverRPY(seq, mingspd, pThresh):
               mplanes.append(mplane)
 
         [roll[i], pitch[i], wca[i], axis] = maneuverRPY(mhdg[i], att)
-        # invert roll
-        # roll[i] = wrapPi(roll[i] + pi)
         wca_axis.append(axis)
         
         if abs(wca[i]) > np.radians(12):
@@ -278,15 +274,15 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
 
   # a more general version would allow the maneuver plane to be non-vertical
   # where mplane is (hv cross earthz) rotated about hv by a roll angle
-#  hv = Point(cosd(rhdg), sind(rhdg) 0);
-#  hzplane = cross_product(hv, mplane);
+#  hv = Point(cosd(rhdg), sind(rhdg) 0)
+#  hzplane = cross_product(hv, mplane)
 
     # the wind correction angle (WCA) relative to flight path is the
     # angle between body frame x and hzplane
     # This should be independent of roll and pitch: roll does not affect the direction
     # of bx and pitch is a rotation about hzplane, which does not change the angle
     wca_axis = cross_product(bx, hzplane)
-    wca = (pi/2) - np.arctan2(vector_norm(wca_axis), dot_product(bx, hzplane));
+    wca = (pi/2) - np.arctan2(vector_norm(wca_axis), dot_product(bx, hzplane))
 
     # to back out wca, rotate about cross(bx, hzplane)
     wca_axis = normalize_vector(wca_axis)
@@ -296,8 +292,13 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     fq = (r2hzp * quat).norm()
 
     # calculate Euler pitch and yaw in maneuver plane
-    pitch = np.arcsin(2*(fq.w*fq.y - fq.z*fq.x))
-    yaw = np.arctan2(2 * (fq.w * fq.z + fq.x * fq.y), 1 - 2 * (fq.y * fq.y + fq.z * fq.z))
+    # for reference this is the xyz-fixed Euler convention used in ArduPilot
+    # pitch = np.arcsin(2 * (fq.w * fq.y - fq.z * fq.x))
+    # yaw = np.arctan2(2 * (fq.w * fq.z + fq.x * fq.y), 1 - 2 * (fq.y * fq.y + fq.z * fq.z))
+
+    rpy = fq.to_euler()
+    pitch = rpy.y
+    yaw = rpy.z
 
     # HACK: reverse rhdg if sign of euler yaw is different from that of rhdg
     # this is detecting a reversal in ground course at low gspd, but I had thought
@@ -325,17 +326,20 @@ def meshes(obj, iconInterval, seq, roll, pitch, wca):
     start = seq.data.index[0]
     end = seq.data.index[-1]    
     nModels = round((end-start) / iconInterval)
+    mRange = range(0, nModels+1)
     index = [ seq.data.index.get_loc(start + i * iconInterval, method='nearest')
-             for i in range(0, nModels+1) ]
-    color = [ rollColorName(roll[index[i]]) for i in range(0, nModels+1) ]
-    state = [ seq.get_state_from_index(index[i]) for i in range(0, nModels+1) ]
+             for i in mRange ]
+    color = [ rollColorName(roll[index[i]]) for i in mRange ]
+    state = [ seq.get_state_from_index(index[i]) for i in mRange ]
     text = [ rpyText( seq.data.index[index[i]], roll[index[i]], pitch[index[i]], wca[index[i]])
-            for i in range(0, nModels+1) ]
+            for i in mRange ]
 
-    result = [ obj.transform(state[0].transform).create_mesh( color[0], text[0], True) ]
+    # enable legend only for first mesh
+    result = [ obj.transform(state[1].transform).create_mesh( color[1], text[1], True) ]
+    # create_mesh assigns all Icons to the "vehicleIcon" legend group
     result.extend([
         obj.transform(state[i].transform).create_mesh( color[i], text[i])
-        for i in range(1, nModels+1)
+        for i in range(2, nModels+1)
     ])
     return result
 
