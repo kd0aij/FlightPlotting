@@ -133,18 +133,18 @@ def getManeuverPlane(rhdg, ghdg):
     revhdg = wrapPi(rhdg + pi)
     chdg = wrapPi(rhdg + pi/2)
     if abs(ghdg - rhdg) < pi/4:
-      mhdg = rhdg;
+      mhdg = rhdg
     elif abs(ghdg - revhdg) < pi/4:
-      mhdg = revhdg;
+      mhdg = revhdg
     elif abs(ghdg - chdg) < pi/4:
-      mhdg = chdg;
+      mhdg = chdg
     else:
       mhdg = wrapPi(chdg + pi)
 
     return mhdg
 
 # generate maneuver RPY for each element of a Section
-def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
+def genManeuverRPY(seq, mingspd, pThresh):
     N = seq.data.shape[0]
     roll = np.empty(N)
     pitch = np.empty(N)
@@ -152,22 +152,24 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
     xwnd = np.empty(N)
     wca_axis = []
     mhdg = np.empty(N)
-    
-    
+
+    rmat = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
+    enu2ned = Quaternion.from_rotation_matrix(rmat)
+
     # calculate ground heading qualified by a minimum groundspeed: mingspd
     # retain previous heading while speed is below mingspd
-    # vel has been rotated into ENU frame; not sure whether it is also rotated to contest frame
-    # rhdg = 0
+    # position and velocity have been rotated into the contest frame
+    # which means runway heading is 0 or pi and cross-box heading is +/-pi/2
+    rhdg = 0
     ghdg = np.zeros(N)
-    ghdg[1] = rhdg;
+    ghdg[1] = rhdg
     for i in range(0, N):
       vel = seq.get_state_from_index(i).vel
-      # vel = enu2ned.rotate(seq.get_state_from_index[i].vel)
-      # try inverse transform
-      # vel = enu2ned.rotation.inverse().transform_point(seq.get_state_from_index(i).vel)
       spd = sqrt(vel.x**2 + vel.y**2)
       if spd > mingspd:
-        ghdg[i] = np.arctan2(vel.y, vel.x)
+        # this matches current Octave code, but looks like it's either wrong or 
+        # needs vNED instead of vENU
+        ghdg[i] = np.arctan2(vel.x, vel.y)
       else:
         ghdg[i] = ghdg[i-1]
         
@@ -181,14 +183,9 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
         curState = seq.get_state_from_index(i)
         t = seq.data.index[i]
         att = seq.get_state_from_index(i).att
-        
-        # rotate back to NED
-        # att = enu2ned.rotation.inverse() * att
-        # att = enu2ned.rotation * att
-        
-        # rotate about z to world frame runway heading
-        zrot = Quaternion.from_axis_angle(Point(0, 0, rhdg))
-        att = zrot * seq.get_state_from_index(i).att
+
+        # rotate att back to NED
+        att = enu2ned * att
         
         e_pitch = eulerPitch(att)
         # determine maneuver heading based on whether this is a vertical line
@@ -199,7 +196,7 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
             
             # check for exit from vertical line
             if (abs(e_pitch) < (pThresh - hyst)):
-              onVertical = 0;
+              onVertical = 0
               # on exit from vertical line
               # use ground heading to define maneuver plane
               print("exit from vertical line")
@@ -211,21 +208,21 @@ def genManeuverRPY(seq, rhdg, mingspd, pThresh, enu2ned):
                   t, np.degrees(e_pitch), np.degrees(mplane["hdg"]), np.degrees(ghdg[i])))
               # record ground heading maneuver plane
               mplanes.append(mplane)
-              mhdg[i] = ghdg[i];
+              mhdg[i] = ghdg[i]
         else:
             # maneuver heading is just ground heading
-            mhdg[i] = ghdg[i];
+            mhdg[i] = ghdg[i]
             
             # entering vertical line if pitch > threshold
             if (abs(e_pitch) > (pThresh)):
-              onVertical = 1;
+              onVertical = 1
               # on entry to vertical line:
               print("entry to vertical line")
               # pick aerobatic box heading using previous ground heading
               mplane["hdg"] = getManeuverPlane(rhdg, ghdg[i])
               mplane["pos"] = curState.pos
               mplane["entry"] = True
-              mhdg[i] = mplane["hdg"];
+              mhdg[i] = mplane["hdg"]
               print("t: {:5.1f} pitch: {:3.1f}, maneuver heading: {:3.0f}, ghdg: {:3.0f}".format(
                   t, np.degrees(e_pitch), np.degrees(mplane["hdg"]), np.degrees(ghdg[i])))
               # record vertical maneuver plane
@@ -273,23 +270,22 @@ def eulerPitch(q: Quaternion):
 def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     # given maneuver heading rhdg, calculate roll angle as angle between
     # rhdg/earthz plane and body x/y plane
-    bx = quat.transform_point(Point(1, 0, 0));
-    # rhdg = mPlane(rhdg, vel3d)
+    bx = quat.transform_point(Point(1, 0, 0))
 
     # hzplane is the normal vector which defines the maneuver plane 
     # this hzplane requires maneuvers to lie in a vertical plane parallel to rhdg
-    hzplane = Point(-sin(rhdg), cos(rhdg), 0);
+    hzplane = Point(-sin(rhdg), cos(rhdg), 0)
 
   # a more general version would allow the maneuver plane to be non-vertical
   # where mplane is (hv cross earthz) rotated about hv by a roll angle
-##  hv = Point(cosd(rhdg), sind(rhdg) 0);
-##  hzplane = cross_product(hv, mplane);
+#  hv = Point(cosd(rhdg), sind(rhdg) 0);
+#  hzplane = cross_product(hv, mplane);
 
     # the wind correction angle (WCA) relative to flight path is the
     # angle between body frame x and hzplane
     # This should be independent of roll and pitch: roll does not affect the direction
     # of bx and pitch is a rotation about hzplane, which does not change the angle
-    wca_axis = cross_product(bx, hzplane);
+    wca_axis = cross_product(bx, hzplane)
     wca = (pi/2) - np.arctan2(vector_norm(wca_axis), dot_product(bx, hzplane));
 
     # to back out wca, rotate about cross(bx, hzplane)
@@ -299,14 +295,14 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     # this is the attitude with body x rotated into maneuver plane
     fq = (r2hzp * quat).norm()
 
-    # calculate Euler pitch in maneuver plane
-    rpy = fq.to_euler()
-    pitch = rpy.y
+    # calculate Euler pitch and yaw in maneuver plane
+    pitch = np.arcsin(2*(fq.w*fq.y - fq.z*fq.x))
+    yaw = np.arctan2(2 * (fq.w * fq.z + fq.x * fq.y), 1 - 2 * (fq.y * fq.y + fq.z * fq.z))
 
     # HACK: reverse rhdg if sign of euler yaw is different from that of rhdg
     # this is detecting a reversal in ground course at low gspd, but I had thought
     # that flipping the hzplane normal shouldn't affect the results
-    if np.sign(rpy.z) != np.sign(rhdg):
+    if np.sign(yaw) != np.sign(rhdg):
         rhdg = wrapPi(rhdg + pi)
 
     # back out rhdg and pitch
@@ -314,14 +310,14 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     rpitch = Quaternion.from_axis_angle(Point(0, 1, 0) * -pitch)
 
     # remaining rotation should be roll relative to maneuver plane
+    # and axisr should be [1 0 0] (pure roll)
     rollq = (rpitch * ryaw * fq).norm()
     axisr = Quaternion.to_axis_angle(rollq)
     thetar = abs(axisr)
-    axisr /= thetar
+    # normalizing won't affect the dot product
+    # axisr /= thetar
     direction = dot_product(axisr, Point(1, 0, 0))
     roll = np.sign(direction) * wrapPi(thetar)
-    # invert roll relative to Octave implementation
-    # roll = wrapPi(roll + pi)
 
     return [roll, pitch, wca, wca_axis]
 
@@ -388,7 +384,7 @@ def ribbon(scale, seq, roll):
         faces.append([ctrIndex, ctrIndex+4, ctrIndex+5])
         facecolors.append(facecolor)
 
-        ctrIndex += 3;
+        ctrIndex += 3
 
     I, J, K = np.array(faces).T
     return [go.Mesh3d(
