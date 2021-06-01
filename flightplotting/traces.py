@@ -1,9 +1,8 @@
 import plotly.graph_objects as go
-import flightplotting.templates
-from flightanalysis import State
+from flightanalysis import Section
 
-from .model import OBJ
-from geometry import Point, Coord, Quaternion, Transformation
+#from .model import OBJ
+from geometry import Point, Coord, Quaternion
 from geometry.point import vector_norm, normalize_vector, dot_product, cross_product
 import numpy as np
 from typing import List, Union
@@ -128,7 +127,7 @@ def wrapPi(r, hyst=0):
         r += 2*pi
     return r
 
-def getManeuverPlane(rhdg, ghdg):
+def getManeuverPlane(ghdg, rhdg=0):
     # constrain maneuver hdg to box or cross-box
     revhdg = wrapPi(rhdg + pi)
     chdg = wrapPi(rhdg + pi/2)
@@ -143,8 +142,8 @@ def getManeuverPlane(rhdg, ghdg):
 
     return mhdg
 
-# generate maneuver RPY for each element of a Section
-def genManeuverRPY(seq, mingspd, pThresh):
+# generate maneuver RPY for each attitude in a Section
+def genManeuverRPY(seq: Section, mingspd: float, pThresh: float):
     N = seq.data.shape[0]
     roll = np.empty(N)
     pitch = np.empty(N)
@@ -182,74 +181,57 @@ def genManeuverRPY(seq, mingspd, pThresh):
         t = seq.data.index[i]
         att = seq.get_state_from_index(i).att
 
-        # rotate att back to NED
+        # The ArduPilot attitude quaternion rotates points from body to world frame (NED).
+        # This rotation restores the quaternion to NED form without removing the
+        # rotation about world Z to the contest frame.
         att = enu2ned * att
-        
+
         e_pitch = eulerPitch(att)
         # determine maneuver heading based on whether this is a vertical line
         if onVertical:
             # maneuver heading is current mplane heading
-            mplane["hdg"] = getManeuverPlane(rhdg, ghdg[i])
             mhdg[i] = mplane["hdg"]
-            
+
             # check for exit from vertical line
             if (abs(e_pitch) < (pThresh - hyst)):
               onVertical = 0
-              # on exit from vertical line
-              # use ground heading to define maneuver plane
+              # on exit from vertical line use ground heading to define maneuver plane
               print("exit from vertical line")
-              # set maneuver plane heading to current ground heading
               mplane["hdg"] = ghdg[i]
               mplane["pos"] = curState.pos
               mplane["entry"] = False
               print("t: {:5.1f} pitch: {:3.1f}, maneuver heading: {:3.0f}, ghdg: {:3.0f}".format(
                   t, np.degrees(e_pitch), np.degrees(mplane["hdg"]), np.degrees(ghdg[i])))
-              # record ground heading maneuver plane
               mplanes.append(mplane)
               mhdg[i] = ghdg[i]
         else:
-            # maneuver heading is just ground heading
+            # maneuver heading is just ground heading when not on a vertical line
             mhdg[i] = ghdg[i]
-            
+
             # entering vertical line if pitch > threshold
             if (abs(e_pitch) > (pThresh)):
               onVertical = 1
-              # on entry to vertical line:
+              # on entry to vertical line pick aerobatic box heading using previous ground heading
               print("entry to vertical line")
-              # pick aerobatic box heading using previous ground heading
-              mplane["hdg"] = getManeuverPlane(rhdg, ghdg[i])
+              mplane["hdg"] = getManeuverPlane(ghdg[i])
               mplane["pos"] = curState.pos
               mplane["entry"] = True
               mhdg[i] = mplane["hdg"]
               print("t: {:5.1f} pitch: {:3.1f}, maneuver heading: {:3.0f}, ghdg: {:3.0f}".format(
                   t, np.degrees(e_pitch), np.degrees(mplane["hdg"]), np.degrees(ghdg[i])))
-              # record vertical maneuver plane
               mplanes.append(mplane)
 
         [roll[i], pitch[i], wca[i], axis] = maneuverRPY(mhdg[i], att)
         wca_axis.append(axis)
-        
+
         if abs(wca[i]) > np.radians(12):
           print("large wca: {:5.1f}".format(np.degrees(wca[i])))
-          
+
         # crosswind is ~ |vENU|*sin(wca): so percentage of earthframe velocity is:
         xwnd[i] = 100 * abs(np.sin(wca[i]))
-        
+
     return [roll, pitch, wca, axis]
 
-
-# calculate heading for maneuver plane
-# TODO: extend this to find and use maneuver plane only on vertical lines
-#       Otherwise use normal Euler fixed angles
-def mPlane(chdg, vel3d:Point):
-    ghdg = np.arctan2(vel3d.y, vel3d.x)
-
-    # constrain heading to chdg or pi+chdg
-    if np.abs(wrapPi(ghdg - chdg)) > pi/2:
-        hdg = wrapPi(chdg + pi)
-    else:
-        hdg = chdg
-    return hdg
 
 def eulerPitch(q: Quaternion):
     _sinp = 2 * (q.w * q.y - q.z * q.x)
@@ -260,8 +242,8 @@ def eulerPitch(q: Quaternion):
         
     return pitch
 
-# rhdg: maneuver heading in radians: contest frame?
-# quat: body to contest? rotation
+# rhdg: maneuver heading in radians: in contest frame this is N pi/2
+# quat: body to world rotation
 # return: [roll, pitch, wca, wca_axis]
 def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     # given maneuver heading rhdg, calculate roll angle as angle between
@@ -311,12 +293,10 @@ def maneuverRPY(rhdg: float, quat: Quaternion) -> [float, float, float, Point]:
     rpitch = Quaternion.from_axis_angle(Point(0, 1, 0) * -pitch)
 
     # remaining rotation should be roll relative to maneuver plane
-    # and axisr should be [1 0 0] (pure roll)
+    # and axisr should be close to [1 0 0] (pure roll)
     rollq = (rpitch * ryaw * fq).norm()
     axisr = Quaternion.to_axis_angle(rollq)
     thetar = abs(axisr)
-    # normalizing won't affect the dot product
-    # axisr /= thetar
     direction = dot_product(axisr, Point(1, 0, 0))
     roll = np.sign(direction) * wrapPi(thetar)
 
@@ -466,10 +446,10 @@ def rpyText(t, roll, pitch, wca):
         rollErr = "lke{:.0f}".format(np.degrees(wrapPi(roll+pi/2)))
     else: # upright
         rollErr = "upr{:.0f}".format(np.degrees(roll))
-    
+
     return "t:{:.1f}, roll: {}, pitch: {:.1f}, wca: {:.1f}".format(
                 t, rollErr, np.degrees(pitch), np.degrees(wca))
-    
+
 def tiptrace(seq, span, roll, pitch, wca):
     text = [ rpyText( seq.data.index[i], roll[i], pitch[i], wca[i])
             for i in range(seq.data.shape[0])]
@@ -484,7 +464,6 @@ def tiptrace(seq, span, roll, pitch, wca):
             legendgroup="tiptrace",
             showlegend=showlegend
         )
-    
 
     return [
         make_offset_trace(Point(0, span/2, 0), "tiptraces", "green", text, True),
