@@ -2,12 +2,11 @@ import plotly.graph_objects as go
 from flightanalysis import Section
 
 #from .model import OBJ
-from geometry import Point, Coord, Quaternion
+from geometry import Point, Coord, Quaternion, Points
 from geometry.point import vector_norm, normalize_vector, dot_product, cross_product
 import numpy as np
 from typing import List, Union
 from math import cos, sin, tan, radians, asin, copysign, sqrt, pi
-
 
 # distance from pilot box to runway centerline
 # note that origin is on runway centerline
@@ -381,18 +380,37 @@ def ribbon(scale, seq, roll):
     )]
 
 def vec_ribbon(sec: Section, span: float):
-    """Vectorised version of ribbon.
-        minor mod - 2 triangles per pair of points:  
+    """WIP Vectorised version of ribbon.
+
+        refactoring ribbon, objectives:
+            speed it up by avoiding looping over array - done
+            make the colouring more generic - not yet
+        minor mod - 2 triangles per pair of points: - done
             current pair to next left
             current right to next pair
+            TODO this doesnt look quite as good as the normal version, perhaps due to alternating normal directions?
+        
     """
 
     left = sec.body_to_world(Point(0, span/2, 0))
     right = sec.body_to_world(Point(0, -span/2, 0))
 
-    points = np.empty((2*len(left)), dtype=a.dtype)
-    c[0::2] = a
-    c[1::2] = b
+    points = np.empty(((2*left.count), 3), dtype=left.data.dtype)
+    points[0::2, :] = left.data
+    points[1::2, :] = right.data
+
+    points = Points(points)
+
+    triids = np.array(range(points.count - 2))
+
+    return [go.Mesh3d(
+        name='ribbon',
+        x=points.x, y=points.y, z=points.z, i=triids, j=triids+1, k=triids+2,
+        intensitymode="cell",
+        facecolor=np.full(len(triids), "red"),
+        showlegend=True,
+        hoverinfo="none"
+    )]
 
 
 def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None, 
