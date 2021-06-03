@@ -380,6 +380,21 @@ def ribbon(scale, seq, roll):
         hoverinfo="none"
     )]
 
+def vec_ribbon(sec: Section, span: float):
+    """Vectorised version of ribbon.
+        minor mod - 2 triangles per pair of points:  
+            current pair to next left
+            current right to next pair
+    """
+
+    left = sec.body_to_world(Point(0, span/2, 0))
+    right = sec.body_to_world(Point(0, -span/2, 0))
+
+    points = np.empty((2*len(left)), dtype=a.dtype)
+    c[0::2] = a
+    c[1::2] = b
+
+
 def trace3d(datax, datay, dataz, name, colour='black', width=2, text=None, 
             legendgroup="", showlegend=False):
     return go.Scatter3d(
@@ -470,6 +485,7 @@ def tiptrace(seq, span, roll, pitch, wca):
         make_offset_trace(Point(0, span/2, 0), "tiptraces", "green", text, True),
         make_offset_trace(Point(0, -span/2, 0), "port", "red", text, False)
     ]
+
 
 
 def create_3d_plot(traces):
