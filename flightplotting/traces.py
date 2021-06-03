@@ -379,6 +379,29 @@ def ribbon(scale, seq, roll):
         hoverinfo="none"
     )]
 
+def _npinterzip(a, b):
+    """
+    takes two numpy arrays and zips them.
+    Args:
+        a ([type]): [a1, a2, a3]
+        b ([type]): [b1, b2, b3]
+
+    Returns:
+        [type]: [a1, b1, a2, b2, a3, b3]
+    """
+    assert(len(a) == len(b))
+    assert(a.dtype == b.dtype)
+    if a.ndim == 2:
+        c = np.empty((2*a.shape[0], a.shape[1]), dtype=a.dtype)
+        c[0::2, :] = a
+        c[1::2, :] = b
+    elif a.ndim == 1:
+        c = np.empty(2*len(a), dtype=a.dtype)
+        c[0::2] = a
+        c[1::2] = b
+
+    return c
+
 def vec_ribbon(sec: Section, span: float):
     """WIP Vectorised version of ribbon.
 
@@ -388,24 +411,32 @@ def vec_ribbon(sec: Section, span: float):
         minor mod - 2 triangles per pair of points: - done
             current pair to next left
             current right to next pair
-            TODO this doesnt look quite as good as the normal version, perhaps due to alternating normal directions?
-        
+
+        0 1 2
+        1 3 2
+        2 3 4
+        3 5 4
+        4 5 6
+        5 7 6
     """
 
     left = sec.body_to_world(Point(0, span/2, 0))
     right = sec.body_to_world(Point(0, -span/2, 0))
 
-    points = np.empty(((2*left.count), 3), dtype=left.data.dtype)
-    points[0::2, :] = left.data
-    points[1::2, :] = right.data
-
-    points = Points(points)
+    points = Points(_npinterzip(left.data, right.data))
 
     triids = np.array(range(points.count - 2))
+    _i = triids   # 1 2 3 4 5
+
+    _js = np.array(range(1, points.count, 2))
+    _j = _npinterzip(_js, _js)[1:-1] # 1 3 3 4 4 5 
+
+    _ks = np.array(range(2, points.count -1 , 2))
+    _k = _npinterzip(_ks, _ks) # 2 2 4 4 6 6 
 
     return [go.Mesh3d(
         name='ribbon',
-        x=points.x, y=points.y, z=points.z, i=triids, j=triids+1, k=triids+2,
+        x=points.x, y=points.y, z=points.z, i=_i, j=_j, k=_k,
         intensitymode="cell",
         facecolor=np.full(len(triids), "red"),
         showlegend=True,
